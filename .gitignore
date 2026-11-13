@@ -1,0 +1,20 @@
+# BMW's SDK: extracted from your own head unit, never committed
+oap-sdk
+oap-sdk/
+# build output: every package contains BMW's SDK, so don't publish these either
+dist/
+*.mgu
+*.tgz
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+
+# images: generated (app icons, previews) except the ones in docs/
+*.png
+!docs/*.png
+!docs/centre/*.png
+!docs/centre/modern/*.png
+
+# the attribution signing key stays local, never pushed
+secret/
