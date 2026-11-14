@@ -219,17 +219,18 @@ function textPx(str, w, h, size, font) {
     for (let i = 0; i < w * h; i++) px[i] = cv.d[i * 4 + 3];
     return px;
 }
-/** A now-playing text piece: say(media) its text. */
-function npText(key, row, say, colour) {
+/** A now-playing text piece: say(media) its text; at: { x, w } across (the centre panel's by default). */
+function npText(key, row, say, colour, at) {
+    const X = (at && at.x) || NP.x, Wd = (at && at.w) || NP.w;
     let last = null;
     const draw = (d) => {
         const str = d.media ? say(d.media) : '';
         if (!str) return null;
-        if (!last || last.key !== str) last = { key: str, px: textPx(str, NP.w, row.h, row.size, row.font) };
+        if (!last || last.key !== str) last = { key: str, px: textPx(str, Wd, row.h, row.size, row.font) };
         return last;
     };
-    return { key, kind: 'm340text', x: NP.x, y: row.y, w: NP.w, h: row.h, live: { name: 'u_text', w: NP.w, h: row.h, draw },
-        colors: (t) => ({ color: [t[colour], 1] }), visible: (d) => !!(d.media && say(d.media)) };
+    return { key, kind: 'm340text', x: X, y: row.y, w: Wd, h: row.h, live: { name: 'u_text', w: Wd, h: row.h, draw },
+        colors: (t) => ({ color: [t[colour], 1] }), visible: (d) => !!(d.media && say(d.media)), z: at && at.z, overMap: !!(at && at.z) };
 }
 function nowPlaying() {
     const time = (d) => { if (!d.media) return ''; const e = Math.floor(d.media.elapsed); return Math.floor(e / 60) + ':' + String(e % 60).padStart(2, '0'); };
@@ -316,8 +317,12 @@ module.exports = {
                 // (the drive mode a little above the design's place, clear of the stock warning lights along the bottom middle, y 652 on)
                 ...line('driveName', 'mode', { x: M.at.mode.x, base: 648 }, 'middle', 440, modeName, modeColour, { max: 18 }));
         }
-        // the song playing, in the centre panel (not over the map; Settings > Now playing)
-        if (!map && !stock && o.nowPlaying !== 'off') list.push(...nowPlaying());
+        // the song playing, in the centre panel; over the map, one line along its bottom edge, where the map has
+        // faded out (the top middle is under the cowl) (Settings > Now playing)
+        if (!stock && o.nowPlaying !== 'off') {
+            if (!map) list.push(...nowPlaying());
+            else list.push(npText('npLine', { y: 560, h: 40, size: 26, font: 'label' }, (m) => [m.title, m.artist].filter(Boolean).join('  ·  '), 'fg', { x: 700, w: 520, z: OVER_MAP + 30 }));
+        }
         if (stock) return list.filter((p) => p.kind === 'flat' || p.x + p.w <= 566 || p.x >= 1104);
         return list;
     },
