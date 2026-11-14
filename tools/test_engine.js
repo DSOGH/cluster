@@ -100,6 +100,19 @@ LAYOUTS.forEach((L) => {
         assert(over.every((l) => (l.geo && l.geo[2] > 0) || hole(l) || (l.kind === 'chevron' && clashes(l, o).indexOf('over the map') < 0)), 'over the map: ' + over.map((l) => l.key).join(' '));
         s.stop();
     });
+    check(id + ': map in the centre: the map over every piece but those meant over it (Waze at z 0 or 900)', () => {
+        const s = makeScene({ layout: id, options: { centre: 'map' }, data: { speed: 0 } });
+        s.engine._tick();
+        const layers = s.client.layers ? Array.from(s.client.layers.values()) : [];
+        const zOf = new Map(layers.map((l) => [l.ref, l.opts.z || 0]));
+        s.engine._pieces().forEach((p) => {
+            const z = zOf.get(p.layer);
+            if (z === undefined) return;
+            if (p.over) assert(z > 900, p.key + ' meant over the map, at z ' + z);
+            else assert(z < 0, p.key + ' under the map, at z ' + z);
+        });
+        s.stop();
+    });
     ['comfort', 'sport', 'efficient'].forEach((look) => check(id + ': ' + look + ' palette has every colour its pieces use', () => {
         const pal = L.palette(look);
         L.pieces({ speedUnit: 'mph', tempUnit: 'f', centre: 'info', redline: 7000, rpmMax: 8000 }).forEach((p) => {

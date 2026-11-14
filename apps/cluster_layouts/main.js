@@ -108,6 +108,8 @@ mgu.run({
             enabled: showing,
             sweep: () => settings.get('sweep') !== 'off',
             target: 'panel',
+            // the Waze centre: the map is drawn on the panel over the layout's lower pieces (map_window.js)
+            underMap: () => options().centre === 'map',
             onFresh: D.onFresh,
         });
         let cluster = start();

@@ -16,5 +16,12 @@
       "output": "dist/{id}@{version}.tgz",
       "network": []
     }
-  }
+  },
+  "components": [
+    {
+      "id": "m340-waze-window",
+      "kind": "tool",
+      "path": "native/m340_waze_window"
+    }
+  ]
 }

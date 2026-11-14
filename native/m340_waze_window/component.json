@@ -1,0 +1,38 @@
+{
+  "id": "m340-waze-window",
+  "kind": "tool",
+  "version": "0.1.0",
+  "title": "Waze map in the M340i layout's window",
+  "description": "Draws the Waze on cluster map in the M340i Sport layout's window (Cluster Layouts, Centre: Waze), filling it, with nothing of BMW's own map screen showing. Restart the head unit after installing or removing it. Remove it to put the map back in its usual place.",
+  "requires": {
+    "mgu-deploy": "0.7.0"
+  },
+  "uninstallable": true,
+  "mguHmi": [
+    "ID7"
+  ],
+  "activate": [
+    "node",
+    "hook.js",
+    "on"
+  ],
+  "deactivate": [
+    "node",
+    "hook.js",
+    "off"
+  ],
+  "files": [
+    {
+      "path": "hook.js",
+      "from": "hook.js",
+      "mode": "0644"
+    }
+  ],
+  "dropins": [
+    {
+      "unit": "waze-on-cluster.service",
+      "name": "zz-m340-waze-window.conf",
+      "from": "zz-m340-waze-window.conf"
+    }
+  ]
+}

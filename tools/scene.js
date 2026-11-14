@@ -73,6 +73,7 @@ function makeScene(opts) {
         data: () => data,
         live: () => (opts.live === undefined ? true : opts.live()),
         enabled: () => (opts.enabled === undefined ? true : opts.enabled()),
+        underMap: () => o.centre === 'map',   // (as main.js)
     });
     engine._tick();   // layers exist only once shown
     return {

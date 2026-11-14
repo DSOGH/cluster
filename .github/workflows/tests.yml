@@ -28,6 +28,6 @@ jobs:
       # Cluster Layouts and Cluster Centre; test_shared checks the apps' copies of shared/ are current
       # (tools/test_built.js needs the SDK, so it runs locally only)
       - run: |
-          for t in engine app centre data finder logs providers shared signals media; do
+          for t in engine app centre data finder logs providers shared signals media waze_window; do
             echo "== tools/test_$t.js"; node tools/test_$t.js
           done

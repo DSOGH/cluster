@@ -61,6 +61,8 @@ const GLIDE_MIN_MS = 30, GLIDE_MAX_MS = 140, GLIDE_GAP_MS = 400;
 const FS = { flat: SH.FLAT_FS, panel: SH.PANEL_FS, dial: SH.DIAL_FS, band: SH.BAND_FS, text: SH.TEXT_FS, bg: SH.BG_FS, icon: SH.ICON_FS, spark: SH.SPARK_FS, car: SH.CAR_FS, leds: SH.LEDS_FS, flag: SH.FLAG_FS, eagles: SH.EAGLE_FS, fireworks: SH.FIREWORKS_FS, road: SH.ROAD_FS, chevron: SH.CHEVRON_FS, mdash: SH.MDASH_FS, mtach: SH.MTACH_FS, sdash: SH.SDASH_FS, licon: SH.LICON_FS, e9x: SH.E9X_FS, mbar: SH.MBAR_FS,
     m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS, m340text: SH.M340TEXT_FS };
 const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950, m340text: 20 };
+/* how far below z 0 the pieces under the Waze map go (opts.underMap): the lowest (-210) stays above -1000 */
+const UNDER_MAP_Z = 600;
 /* kinds that animate (u_time): their clock sent from the head unit every frame (values()) */
 const TIMED = { car: true, leds: true, flag: true, eagles: true, fireworks: true };
 const HIST = 64;
@@ -80,13 +82,18 @@ const SETTLE_MS = 1200;
  *   opts.live(), opts.enabled(), opts.sweep() (optional: the start-up sweep wanted), opts.log
  *   opts.settleMs how long the layout must be wanted before it shows (SETTLE_MS; the tests: 0)
  *   opts.font() the glyph family ('bold' default, 'light'; font.js), opts.target ('panel' default, 'map', 'hud'), opts.contend (take the slot over from the stock HMI), opts.z
- *   (added to every layer's z: above another client's layers on the same target)
+ *   (added to every layer's z: above another client's layers on the same target), opts.underMap() (the Waze map
+ *   drawn over the layout on its target: the pieces not marked overMap below z 0)
  */
 function startCluster(opts) {
     const { client: cr, log } = opts;
     // the target: the whole panel by default; 'map' is the centre (slot 0x100, 1088x480), taken over from the
     // stock map in Map view while a layer wants it (contend)
     const TARGET = opts.target || 'panel', contend = !!opts.contend, zShift = opts.z || 0;
+    // the Waze map over the layout (opts.underMap() true: the layout holds its map window): every piece not marked
+    // overMap goes UNDER_MAP_Z lower, below z 0, so the map is over it whichever Waze on cluster draws it (0.9.14's
+    // panel target: z 0; 0.9.107's layout window: z 900); the overMap pieces (950 up) stay over the map
+    const underMap = () => !!(opts.underMap && opts.underMap());
     const textures = new Map();     // sampled images by uniform name (sent once)
     let specs = [], pieces = [], fontRef = 0, fontFam = null, shown = false, built = false, sweepEnd = 0, group = opts.group || null;
     /* only the active group's pieces (a page) are built; pieces without a group always */
@@ -161,7 +168,9 @@ function startCluster(opts) {
             // is never left empty (which would hand it back to the stock HMI)
             // (shown only if it shows now: visible(d), a piece that comes and goes with the car's state)
             const vis = s.visible ? !!s.visible(opts.data()) : true;
-            const ref = cr.effect({ target: TARGET, klass: 'content', z: zShift + (s.z !== undefined ? s.z : Z[s.kind]), x: s.x, y: s.y, w: s.w, h: s.h, fs: FS[s.kind], visible: shown && vis, contend });
+            const z0 = s.z !== undefined ? s.z : Z[s.kind];
+            const z = Math.max(-1000, Math.min(1000, zShift + z0 - (underMap() && !s.overMap ? UNDER_MAP_Z : 0)));
+            const ref = cr.effect({ target: TARGET, klass: 'content', z, x: s.x, y: s.y, w: s.w, h: s.h, fs: FS[s.kind], visible: shown && vis, contend });
             if (!ref) { warnOnce('piece ' + s.key + ' refused here'); return; }
             const p = { ref, spec: s, colours: '', text: null, value: 0, sent: -1, anim: 0, dyn: '', histSent: -1, vis, clock: !!(s.time || TIMED[s.kind]) };
             if (s.kind !== 'flat') cr.uniform(ref, 'u_size', [s.w, s.h]);
