@@ -1,5 +1,5 @@
 {
- "comment": "Signal flags the installer accepts on the car, as the apps of idrive7-apps (cauliflowermossgrape and eroobeeroo) declare them: r needs a getter, s a notifier; the head unit's app manager refuses an app whose flags its catalog does not have (generateSomeipInterfaces). tools/test_signals.js checks every app.json against this. KombiIF.displayRangeElectricVehicle (get, notify): from the G05 PHEV's own catalog (Cluster Layouts logs). Efficiencytainment2.statusPowerRelativHybrid, ResetLogic.currentConsumption, DisplayDataServer.functionalLibraryData (get, notify) and FES.displaySportPowertrain (notify): the same catalog, Nov 10 2026.",
+ "comment": "Signal flags the installer accepts on the car, as the apps of idrive7-apps (cauliflowermossgrape and eroobeeroo) declare them: r needs a getter, s a notifier; the head unit's app manager refuses an app whose flags its catalog does not have (generateSomeipInterfaces). tools/test_signals.js checks every app.json against this. KombiIF.displayRangeElectricVehicle (get, notify): from the G05 PHEV's own catalog (Cluster Layouts logs). Efficiencytainment2.statusPowerRelativHybrid, ResetLogic.currentConsumption, DisplayDataServer.functionalLibraryData (get, notify) and FES.displaySportPowertrain (notify): the same catalog, Nov 10 2026. HmiMediaState (instance HMI_CID: playerMetadata, mainMenuMetadata, tracks, trackSelection, get and notify): as james10424/idrive7-custom's Custom Cluster 0.1.13-0.1.28 declared it, installed and read on a car, Nov 2026.",
  "signals": {
   "de.bmw.body.Light": {
    "StatusFunctionsIndicators": [
@@ -279,6 +279,12 @@
    "functionalLibraryData": [
     "rs"
    ]
+  },
+  "de.bmw.infotainment.hmi.hmimediastate.HmiMediaState": {
+   "playerMetadata": "rs",
+   "mainMenuMetadata": "rs",
+   "tracks": "rs",
+   "trackSelection": "rs"
   }
  }
 }

@@ -77,6 +77,7 @@ mgu.run({
             cluster: settings.get('cluster') === 'm' ? 'm' : 'standard',
             bottomStrip: settings.get('bottomStrip') === 'layout' ? 'layout' : 'stock',   // the KOMBI's strip under y 660 (layouts.js)
             boxBezel: settings.get('boxBezel') === 'on',   // (off: the box sits on the plain background)
+            nowPlaying: settings.get('nowPlaying') === 'off' ? 'off' : 'on',   // (M340i Sport: the song in the centre panel)
             vehicle: D.vehicle().vehicle,      // set, or found from the car (Auto)
         });
         /** Live: demo data on, or the car's signals answer (a parked car sends nothing new for minutes, so a
@@ -134,7 +135,7 @@ mgu.run({
         settings.onChange((k) => {
             if (k === 'look' || k === 'background') return cluster.recolour();
             if (k === 'layout') layout = byId(settings.get('layout'));
-            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres'].indexOf(k) >= 0) cluster.rebuild();
+            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying'].indexOf(k) >= 0) cluster.rebuild();
         });
 
         /* ---------- the car's range and charge signals, from its own catalog ---------- */
@@ -146,7 +147,8 @@ mgu.run({
         }
         let page = 0;   // 0: status; 1...: the signal list, SIGNALS_PER_PAGE a page
         // 0: status; 1: the raw drive-mode and range values; 2: what the cluster has up; 3...: the signal list
-        const pages = () => 3 + Math.ceil(found.list.length / SIGNALS_PER_PAGE);
+        // (status, the drive mode and ranges, the cluster's report, the song playing, then the signal list)
+        const pages = () => 4 + Math.ceil(found.list.length / SIGNALS_PER_PAGE);
 
         ui.onClick('BTN_SHOW', () => { settings.set('show', showing() ? 'off' : 'on'); return render(); });
         ui.onClick('BTN_SIGNALS', () => { logView = null; page = (page + 1) % Math.max(1, pages()); return render(); });
@@ -252,9 +254,27 @@ mgu.run({
                 lines.slice(0, 15).forEach((l, i) => cv.text(l.slice(0, 140), 48, 116 + i * 26, 16, t.text, { font: 'label', literal: true }));
                 return ui.image('MAIN_GFX', cv);
             }
-            if (page > 2) {
-                cv.text('Signals on this car for ranges, fuel and charge (' + found.list.length + ')   ·   page ' + (page - 2) + ' of ' + (pages() - 3), 48, 70, 26, t.text, { font: 'bold', literal: true });
-                found.list.slice((page - 3) * SIGNALS_PER_PAGE, (page - 2) * SIGNALS_PER_PAGE).forEach((s, i) => {
+            if (page === 3) {
+                // the car's media state as it comes (shared/media.js), and the song read from it: photograph it with a
+                // song playing from each source (CarPlay, Bluetooth, USB, radio)
+                cv.text('What the car sends for the song playing (photograph this with music on)', 48, 70, 24, t.text, { font: 'bold', literal: true });
+                const raw = D.status().raw || {}, m = data().media;
+                let y = 116;
+                cv.text('Media state: ' + (D.status().media || 'not subscribed (Settings > Now playing, or no such interface on this car)'), 48, y, 16, t.dim, { font: 'label', literal: true }); y += 30;
+                ['playerMetadata', 'mainMenuMetadata', 'trackSelection', 'tracks'].forEach((n) => {
+                    const txt = raw[n] || 'nothing yet';
+                    cv.text(n + ':  ' + txt.slice(0, 120), 48, y, 15, t.text, { font: 'label', literal: true }); y += 21;
+                    for (let i = 120; i < txt.length && i < 3 * 120; i += 120) { cv.text(txt.slice(i, i + 120), 72, y, 15, t.dim, { font: 'label', literal: true }); y += 21; }
+                    y += 6;
+                });
+                const f = (m && m.from) || {};
+                cv.text('Read as:  title "' + ((m && m.title) || '') + '"' + (f.title ? ' (' + f.title + ')' : '') + '   ·   artist "' + ((m && m.artist) || '') + '"' + (f.artist ? ' (' + f.artist + ')' : '')
+                    + '   ·   album "' + ((m && m.album) || '') + '"', 48, y + 24, 18, t.text, { font: 'bold', literal: true });
+                return ui.image('MAIN_GFX', cv);
+            }
+            if (page > 3) {
+                cv.text('Signals on this car for ranges, fuel and charge (' + found.list.length + ')   ·   page ' + (page - 3) + ' of ' + (pages() - 4), 48, 70, 26, t.text, { font: 'bold', literal: true });
+                found.list.slice((page - 4) * SIGNALS_PER_PAGE, (page - 3) * SIGNALS_PER_PAGE).forEach((s, i) => {
                     const y = 130 + i * 54;
                     cv.text(s.iface.replace(/^de\.bmw\./, '') + '  ·  ' + s.field + (s.get ? '  get' : '') + (s.notify ? '  notify' : ''), 48, y, 20, t.text, { font: 'label', literal: true });
                     cv.text(s.members.slice(0, 10).join(', ').slice(0, 150), 72, y + 24, 16, t.dim, { font: 'label', literal: true });

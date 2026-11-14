@@ -28,6 +28,7 @@ const { DidReader } = require('./kit/dids');
 const { startProviders } = require('./providers');
 const { createFuse } = require('./kwfuse');
 const Awake = require('./kit/awake');
+const Media = require('./media');
 
 const isNum = (v) => typeof v === 'number' && isFinite(v);
 const PROGRAMS = { S_MINUS_PROGRAMM: 'S', M_MINUS_PROGRAMM: 'M', 1: 'S', 2: 'M' };
@@ -316,6 +317,17 @@ function startData(ctx, opts) {
             if (p && p !== carPress) { carPress = p; log.info('car pressure unit: ' + p); }
         },
     }, 'units', { pollMs: 60000 });
+    /* the song the car's media player shows (media.js), for an app that declares the interface (Cluster Layouts):
+     * the centre screen's instance, each field's raw value kept for the Signals screen */
+    const media = (ctx.spec.signals || {})[Media.IFACE] ? Media.createMedia() : null;
+    if (media) {
+        const put = (k, name) => (v) => { fes(name)(v); media.put(k, v); };
+        ctx.signals.watch(Media.IFACE, Media.INSTANCE, {
+            playerMetadata: put('pm', 'playerMetadata'), mainMenuMetadata: put('mm', 'mainMenuMetadata'),
+            tracks: put('tracks', 'tracks'), trackSelection: put('sel', 'trackSelection'),
+        }, log).then((sub) => { status.media = sub && sub.error ? 'error: ' + sub.error : 'subscribed'; log.info('media ' + status.media); })
+            .catch((e) => { status.media = 'error: ' + ((e && e.message) || e); log.warn('media: ' + status.media); });
+    }
     watch('de.bmw.infotainment.KombiIF', {
         statusRangeTankStatus: (v) => { fes('statusRangeTankStatus')(v); pickRanges(v); },
         // the cluster's own electric range (in this car's catalog), in the unit the cluster shows: miles on a car
@@ -474,6 +486,8 @@ function startData(ctx, opts) {
             o.fuelPct = isNum(o.fuelLevel) ? Math.max(0, Math.min(100, o.fuelLevel / tank * 100)) : undefined;
             if (o.engineOn === undefined && Date.now() - (x.at.engineState || 0) < 60000) o.engineOn = x.engineState === 'on';
             if (x.startWhy) o.startWhy = x.startWhy;
+            // the song playing (media.js): { title, artist, album, elapsed } or null
+            o.media = d.demo ? DEMO_SONG(tNow) : media ? media.now() : null;
             // the cruise control: on with a set speed (the head-up display's), off at 0
             if (!d.demo && Date.now() - (x.at.cruiseSet || 0) < 10000) o.cruise = { on: x.cruiseSet > 0 && x.cruiseSet < 250, set: x.cruiseSet > 0 && x.cruiseSet < 250 ? x.cruiseSet : undefined };
             return o;
@@ -492,6 +506,12 @@ function startData(ctx, opts) {
 }
 
 /** Demo values for the readings the kit's simulator has none of. */
+/** Demo mode's song (made up), changing every three minutes, its time counted from its start. */
+function DEMO_SONG(t) {
+    const songs = [['Midnight Drive', 'The Night Shift', 'Neon Roads'], ['Second Gear', 'Torque & Co.', 'Redline Sessions'], ['Coastline', 'Mara Ellis', 'Open Windows']];
+    const s = t / 1000, i = Math.floor(s / 180) % songs.length;
+    return { title: songs[i][0], artist: songs[i][1], album: songs[i][2], elapsed: s % 180, from: {} };
+}
 function demo(d) {
     const t = Date.now() / 1000, rpm = d.rpm || 1500;
     return {

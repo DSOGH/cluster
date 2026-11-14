@@ -197,6 +197,49 @@ function line(key, set, at, align, room, say, colour, o) {
         says: say,
     }, o.more)];
 }
+/**
+ * Now playing: the song the car's media player shows (data.js d.media, from the head unit's media state), in the
+ * centre panel under the speed and the gear: its title, then artist and album, then how long it has played (counted
+ * from when the song changed: the car gives no position or length). The two text lines are drawn on the head unit
+ * in the kit's fonts (any script) and sent as pictures when the song changes ('m340text', live).
+ */
+const NP = { x: 660, w: 600, title: { y: 438, h: 50, size: 36, font: 'bold' }, sub: { y: 490, h: 36, size: 24, font: 'label' }, timeBase: 556 };
+let Canvas = null;
+/** A line of text as one byte a pixel (its coverage), w x h, centred, cut with "..." when too long. */
+function textPx(str, w, h, size, font) {
+    if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+    const cv = new Canvas(w, h), o = { font, literal: true };
+    let s = String(str);
+    if (cv.textWidth(s, size, o) > w - 8) {
+        while (s.length > 1 && cv.textWidth(s + '...', size, o) > w - 8) s = s.slice(0, -1);
+        s = s.replace(/\s+$/, '') + '...';
+    }
+    cv.text(s, w / 2, Math.round(h * 0.5 + size * 0.36), size, '#ffffff', Object.assign({ align: 'center' }, o));
+    const px = Buffer.alloc(w * h);
+    for (let i = 0; i < w * h; i++) px[i] = cv.d[i * 4 + 3];
+    return px;
+}
+/** A now-playing text piece: say(media) its text. */
+function npText(key, row, say, colour) {
+    let last = null;
+    const draw = (d) => {
+        const str = d.media ? say(d.media) : '';
+        if (!str) return null;
+        if (!last || last.key !== str) last = { key: str, px: textPx(str, NP.w, row.h, row.size, row.font) };
+        return last;
+    };
+    return { key, kind: 'm340text', x: NP.x, y: row.y, w: NP.w, h: row.h, live: { name: 'u_text', w: NP.w, h: row.h, draw },
+        colors: (t) => ({ color: [t[colour], 1] }), visible: (d) => !!(d.media && say(d.media)) };
+}
+function nowPlaying() {
+    const time = (d) => { if (!d.media) return ''; const e = Math.floor(d.media.elapsed); return Math.floor(e / 60) + ':' + String(e % 60).padStart(2, '0'); };
+    return [
+        npText('npTitle', NP.title, (m) => m.title || m.artist, 'fg'),
+        npText('npSub', NP.sub, (m) => (m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album), 'dim'),
+        ...line('npTime', 'small', { x: NP.x + NP.w / 2, base: NP.timeBase }, 'middle', 140, time, 'dim', { more: { visible: (d) => !!d.media } }),
+    ];
+}
+
 /** Where a line's ink ends on the cluster (the am / pm follows the time). */
 function inkEnd(set, at, str) {
     const G = M.glyphs[set];
@@ -210,7 +253,7 @@ module.exports = {
     title: 'M340i Sport',
     font: 'wide',
     noFont: true,           // (its lettering is the design's own, on its glyph sheet: the engine's glyph atlas is not sent)
-    assets: 8,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)
+    assets: 10,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+2: the now-playing text lines' pictures)
     startKB: 640,           // (about 610 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
     stripGear: true,
     stripFuel: false,
@@ -273,6 +316,8 @@ module.exports = {
                 // (the drive mode a little above the design's place, clear of the stock warning lights along the bottom middle, y 652 on)
                 ...line('driveName', 'mode', { x: M.at.mode.x, base: 648 }, 'middle', 440, modeName, modeColour, { max: 18 }));
         }
+        // the song playing, in the centre panel (not over the map; Settings > Now playing)
+        if (!map && !stock && o.nowPlaying !== 'off') list.push(...nowPlaying());
         if (stock) return list.filter((p) => p.kind === 'flat' || p.x + p.w <= 566 || p.x >= 1104);
         return list;
     },

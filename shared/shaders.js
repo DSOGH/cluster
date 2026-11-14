@@ -1902,6 +1902,19 @@ void main() {
 }`;
 const M340GLYPHS_FS = m340Glyphs(6), M340WORDS_FS = m340Glyphs(18);
 
+/**
+ * A line of text drawn on the head unit (the kit's fonts: any script) and sent as a picture (u_text: one byte a
+ * pixel, its coverage) when it changes, in one colour: the song now playing (layout_m340.js).
+ */
+const M340TEXT_FS = `#version 100
+${HIGHP}
+uniform sampler2D u_text;
+uniform vec4 u_color;
+varying vec2 v_uv;
+void main() {
+    gl_FragColor = vec4(u_color.rgb, u_color.a * texture2D(u_text, v_uv).r);
+}`;
+
 /** The map's veil: black over the map's window, clear where the map shows (u_veil: how much, the design's feathered edges). */
 const M340VEIL_FS = `#version 100
 ${HIGHP}
@@ -1913,4 +1926,4 @@ void main() {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - texture2D(u_veil, v_uv).r);
 }`;
 
-module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };
+module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };

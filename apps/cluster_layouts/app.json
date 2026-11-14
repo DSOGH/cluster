@@ -2,7 +2,7 @@
   "id": "cluster_layouts",
   "title": "Cluster Layouts",
   "description": "Your own layout on the whole instrument cluster (round dials, gear, temperatures), drawn by the cluster itself",
-  "version": "0.29.1",
+  "version": "0.30.0",
   "startType": "autostart",
   "vendor": "custom",
   "loggingId": "OA9L",
@@ -113,6 +113,14 @@
     "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
       "_optional": "the cruise control's set speed",
       "functionalLibraryData": "rs"
+    },
+    "de.bmw.infotainment.hmi.hmimediastate.HmiMediaState": {
+      "_instances": "HMI_CID",
+      "_optional": "the song now playing (M340i Sport's centre panel)",
+      "playerMetadata": "rs",
+      "mainMenuMetadata": "rs",
+      "tracks": "rs",
+      "trackSelection": "rs"
     }
   },
   "screens": [
@@ -403,6 +411,22 @@
         [
           "stock",
           "Stock (the stock centre content)"
+        ]
+      ]
+    },
+    {
+      "key": "nowPlaying",
+      "label": "Now playing (M340i Sport)",
+      "type": "choice",
+      "default": "on",
+      "options": [
+        [
+          "on",
+          "The song playing, in the centre panel"
+        ],
+        [
+          "off",
+          "Off"
         ]
       ]
     },
