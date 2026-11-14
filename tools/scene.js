@@ -18,6 +18,18 @@ Module._load = function (req, parent, isMain) {
     return load.call(this, req, parent, isMain);
 };
 
+/* a layer's uniforms as the cluster shows them once its animations have played: a uniform an animation holds
+ * (not looping) at its last key */
+function settled(l) {
+    const u = Object.assign({}, l.uniforms);
+    Object.values(l.anims || {}).forEach((a) => {
+        if (a.property !== 'uniform' || !a.name || a.loop || typeof a.keys !== 'string') return;
+        const last = a.keys.trim().split(/\s+/).pop().split(':')[1];
+        if (last !== undefined) u[a.name] = { v: last.split(',').map(Number) };
+    });
+    return u;
+}
+
 class FakeClient extends EventEmitter {
     constructor() { super(); this.layers = new Map(); this.next = 1; this.bytes = 0; this.messages = 0; this.log = []; }
     _count(obj, extra) { this.messages++; this.bytes += JSON.stringify(obj).length + 5 + (extra || 0); this.log.push(obj); }
@@ -32,7 +44,7 @@ class FakeClient extends EventEmitter {
     bind(ref, sampler, asset) { this.layers.get(ref).binds[sampler] = asset; this._count({ op: 'bind', ref, sampler, asset }); }
     set(ref, o) { Object.assign(this.layers.get(ref).opts, o); this._count(Object.assign({ op: 'set', ref }, o)); }
     drop(ref) { this.layers.delete(ref); this._count({ op: 'drop', ref }); }
-    animate(ref, o) { const l = this.layers.get(ref); l.anims = l.anims || {}; const n = (l.nextAnim = (l.nextAnim || 0) + 1); l.anims[n] = o; this._count(Object.assign({ op: 'animate', ref, anim: n }, o)); return n; }
+    animate(ref, o) { const l = this.layers.get(ref); l.anims = l.anims || {}; const n = o.anim && l.anims[o.anim] ? o.anim : (l.nextAnim = (l.nextAnim || 0) + 1); /* (o.anim: replaces that one, as the service does) */ l.anims[n] = o; this._count(Object.assign({ op: 'animate', ref, anim: n }, o)); return n; }
     stop(ref, anim) { const l = this.layers.get(ref); if (l && l.anims) delete l.anims[anim]; this._count({ op: 'stop', ref, anim }); }
     reset() { this.bytes = 0; this.messages = 0; this.log = []; }
 }
@@ -75,7 +87,7 @@ function makeScene(opts) {
             const order = { ambient: 0, content: 1, overlay: 2, alert: 3 };
             const quads = ls.filter((l) => l.kind === 'effect' && l.opts.visible !== false)
                 .sort((a, b) => (order[a.opts.klass] - order[b.opts.klass]) || ((a.opts.z || 0) - (b.opts.z || 0)) || (a.ref - b.ref))
-                .map((l) => ({ ref: l.ref, x: l.opts.x, y: l.opts.y, w: l.opts.w, h: l.opts.h, fs: l.opts.fs, uniforms: l.uniforms, binds: l.binds }));
+                .map((l) => ({ ref: l.ref, x: l.opts.x, y: l.opts.y, w: l.opts.w, h: l.opts.h, fs: l.opts.fs, uniforms: settled(l), binds: l.binds }));
             return { w: 1920, h: 720, quads, assets };
         },
         stop() { engine.stop(); },

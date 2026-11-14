@@ -24,6 +24,9 @@
  *     min                                 the lowest value passed on (0 unless set: a power gauge's regeneration),
  *     range(d) -> [min, max]              instead, the lowest and highest now (a tach that reads kW in an electric drive),
  *     sweep: true                         part of the start-up sweep,
+ *     glide: true                         each new reading played by the cluster as a short glide from where the
+ *                                         value stands (GLIDE_*): smooth at the cluster's frame rate between
+ *                                         the car's readings, however late the head unit's timer runs
  *     group: 'name'                       built only while that group is active (setGroup: a page),
  *     dyn(d, t) -> { u_name: [numbers] }  more uniforms, sent when they change (at the text rate),
  *     frame(d, dtMs) -> { u_name: [numbers] }  uniforms worked out every frame (motion: the road's distance
@@ -48,6 +51,9 @@ const TAU_MS = 10;           // a needle's easing towards its reading: most of t
 const MIN_GAP_MS = 4;        // a reading's update at most this soon after the last
 const EPS = 0.0015;          // a value moving less than this (of its max) is not sent
 const SWEEP_MS = 700;        // up, then as long back down
+/* a gliding value (glide: true): each new reading reached over about the time the readings come apart (measured),
+ * within these bounds; a gap longer than GLIDE_GAP_MS is a pause, not a rate */
+const GLIDE_MIN_MS = 30, GLIDE_MAX_MS = 140, GLIDE_GAP_MS = 400;
 const FS = { flat: SH.FLAT_FS, panel: SH.PANEL_FS, dial: SH.DIAL_FS, band: SH.BAND_FS, text: SH.TEXT_FS, bg: SH.BG_FS, icon: SH.ICON_FS, spark: SH.SPARK_FS, car: SH.CAR_FS, leds: SH.LEDS_FS, flag: SH.FLAG_FS, eagles: SH.EAGLE_FS, fireworks: SH.FIREWORKS_FS, road: SH.ROAD_FS, chevron: SH.CHEVRON_FS, mdash: SH.MDASH_FS, mtach: SH.MTACH_FS, sdash: SH.SDASH_FS, licon: SH.LICON_FS, e9x: SH.E9X_FS, mbar: SH.MBAR_FS,
     m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS };
 const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950 };
@@ -272,10 +278,32 @@ function startCluster(opts) {
             if (!s.value || !inGroup(p)) return;
             const r = s.range ? s.range(d) : null, max = r ? r[1] : s.max || 1;
             const want = Math.max(r ? r[0] : s.min || 0, Math.min(max * 1.02, Number(s.value(d)) || 0));
+            if (s.glide && !sweepEnd) { glide(p, want, max, now); return; }
             p.value += (want - p.value) * k;
             if (Math.abs(want - p.value) < max * EPS / 4) p.value = want;
             if (Math.abs(p.value - p.sent) >= max * EPS) { p.sent = p.value; cr.uniform(p.ref, 'u_value', [Math.round(p.value * 10000) / 10000]); }
         });
+    }
+
+    /**
+     * A gliding value's new reading: the cluster plays a straight line from where the value stands now to the
+     * reading, over about the time between the car's readings, and holds it there. One message a reading, none
+     * between; the motion is the cluster's own, at its frame rate.
+     */
+    function glide(p, want, max, now) {
+        const g = p.glide || (p.glide = { from: p.value, to: p.value, at: now, ms: 0, gap: 0, seen: 0, anim: 0 });
+        if (Math.abs(want - g.to) < max * EPS) return;
+        // the time between readings that moved it (an average of the recent ones; a long pause does not count)
+        const gap = g.seen ? now - g.seen : 0;
+        if (gap > 0 && gap < GLIDE_GAP_MS) g.gap = g.gap ? g.gap * 0.75 + gap * 0.25 : gap;
+        g.seen = now;
+        // where the value stands now, partway along the last glide
+        const f = g.ms ? Math.min(1, (now - g.at) / g.ms) : 1, at = g.from + (g.to - g.from) * f;
+        const ms = Math.round(Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, g.gap || GLIDE_MIN_MS)));
+        const v = (x) => Math.round(x * 10000) / 10000;
+        g.anim = cr.animate(p.ref, { property: 'uniform', name: 'u_value', keys: '0:' + v(at) + ' ' + ms + ':' + v(want), loop: false, anim: g.anim }) || g.anim;
+        g.from = at; g.to = want; g.at = now; g.ms = ms;
+        p.value = want; p.sent = want;
     }
 
     /** The start-up sweep: each needle and band to full and back, played by the cluster. */
@@ -289,7 +317,7 @@ function startCluster(opts) {
         sweepEnd = now + 2 * SWEEP_MS + 150;
     }
     function endSweep() {
-        pieces.forEach((p) => { if (p.anim) { cr.stop(p.ref, p.anim); p.anim = 0; } });
+        pieces.forEach((p) => { if (p.anim) { cr.stop(p.ref, p.anim); p.anim = 0; } if (p.glide) p.glide = null; });
         sweepEnd = 0;
     }
 

@@ -128,7 +128,8 @@ function side(k, x, y, w, h, hex) {
             u_fill: [col, g.y[0], g.y[1], M.capHalf], u_box: [0, 0, 0, 0], u_boxTo: [0, 0, 0],
         },
         more: {
-            value: frac, max: 1, sweep: true,
+            // (glide: the cluster plays the fill's motion between the car's readings, at its own frame rate)
+            value: frac, max: 1, sweep: true, glide: true,
             colors: () => ({ c0: g[k][0][1], c1: g[k][1][1] }),
             // the numeral nearest the reading lit; with the engine off the revs' 0 blank (READY stands there)
             dyn: (d) => {
