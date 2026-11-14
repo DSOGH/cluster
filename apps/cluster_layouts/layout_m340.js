@@ -29,6 +29,7 @@ const M = ART.META;
 const isNum = C.isNum;
 const KMH_PER_MPH = 1.609344;
 const RPM_MAX = 8000;
+const VEIL_GAIN = 2;          // the map's faded edges: the design's fade, half as wide (the map brighter)
 const OVER_MAP = 960;        // over Waze on cluster's map layer (its kWindowZ, 900) and the veil (950)
 
 const PAL = {
@@ -219,6 +220,90 @@ function textPx(str, w, h, size, font) {
     for (let i = 0; i < w * h; i++) px[i] = cv.d[i * 4 + 3];
     return px;
 }
+/*
+ * The next turn while a route runs (data.js d.nav, from directions.js / nav.js): an arrow, the distance and the road,
+ * drawn on the head unit as one picture when the turn or its distance changes ('m340text', live), at the top of the
+ * centre, over the map.
+ */
+const DIR = { x: 640, y: 140, w: 640, h: 104 };
+/** The arrow's bend in degrees (0 straight on, negative to the left), or null: no arrow (a roundabout, the destination). */
+function turnAngle(m) {
+    const d = String(m.dir || ''), left = /LEFT/.test(d), right = /RIGHT/.test(d), side = left ? -1 : right ? 1 : 0;
+    if (m.kind === 'turn') {
+        if (/UTURN/.test(d)) return side * 180;
+        if (/SLIGHT/.test(d)) return side * 45;
+        if (/HARD/.test(d)) return side * 135;
+        return d === 'STRAIGHT_ON' || !side ? 0 : side * 90;
+    }
+    if (m.kind === 'branch' || m.kind === 'keep' || m.kind === 'lanechange') return side * (m.kind === 'branch' ? 45 : 30);
+    if (m.kind === 'roundabout' || m.kind === 'destination') return null;
+    return 0;
+}
+/** The turn's arrow in an s x s box at (x, y) on cv, white. */
+function drawArrow(cv, m, x, y, s) {
+    const c = '#ffffff', W = Math.round(s * 0.13), cx = x + s / 2, base = y + s * 0.95;
+    const head = (tx, ty, a) => {   // a triangle pointing along angle a (degrees, 0 up), its tip at (tx, ty)
+        const r = a * Math.PI / 180, ux = Math.sin(r), uy = -Math.cos(r), L = s * 0.3, H = s * 0.22;
+        cv.triangle([[tx, ty], [tx - ux * L - uy * H, ty - uy * L + ux * H], [tx - ux * L + uy * H, ty - uy * L - ux * H]], c);
+    };
+    if (m.kind === 'destination') {   // a pin
+        cv.circle(cx, y + s * 0.35, s * 0.24, c); cv.triangle([[cx - s * 0.2, y + s * 0.47], [cx + s * 0.2, y + s * 0.47], [cx, y + s * 0.92]], c);
+        return;
+    }
+    if (m.kind === 'roundabout') {   // the ring, the way in from below, the exit's number in the ring
+        cv.arc(cx, y + s * 0.42, s * 0.22, s * 0.34, 0, 360, c);
+        cv.line(cx, base, cx, y + s * 0.76, W, c);
+        if (m.exit) cv.text(String(m.exit), cx, y + s * 0.42 + s * 0.12, Math.round(s * 0.32), c, { font: 'bold', align: 'center', literal: true });
+        return;
+    }
+    const a = turnAngle(m), mid = y + s * 0.5;
+    if (Math.abs(a) >= 180) {   // a U-turn: up, over and down
+        const x2 = cx + (a < 0 ? -1 : 1) * s * 0.32;
+        cv.line(cx, base, cx, y + s * 0.3, W, c);
+        // (the top half of a ring between the two legs)
+        cv.arc((cx + x2) / 2, y + s * 0.3, s * 0.16 - W / 2, s * 0.16 + W / 2, 270, 360, c);
+        cv.arc((cx + x2) / 2, y + s * 0.3, s * 0.16 - W / 2, s * 0.16 + W / 2, 0, 90, c);
+        cv.line(x2, y + s * 0.3, x2, y + s * 0.62, W, c);
+        head(x2, y + s * 0.86, 180);
+        return;
+    }
+    const r = a * Math.PI / 180, L = s * 0.36, ex = cx + Math.sin(r) * L, ey = mid - Math.cos(r) * L;
+    cv.line(cx, base, cx, mid, W, c);
+    cv.line(cx, mid, ex - Math.sin(r) * s * 0.1, ey + Math.cos(r) * s * 0.1, W, c);
+    head(ex + Math.sin(r) * s * 0.06, ey - Math.cos(r) * s * 0.06, a);
+}
+/** The turn as one byte a pixel: the arrow, then the distance (large) over the road, the whole centred. */
+function dirPx(m, w, h) {
+    if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+    const cv = new Canvas(w, h), s = h - 8, gap = 18;
+    const dist = m.dist ? m.dist + ' ' + m.unit : '', road = m.road || (m.kind === 'destination' ? 'Destination' : '');
+    const big = 46, small = 24, fb = { font: 'bold', literal: true }, fl = { font: 'label', literal: true };
+    const room = w - s - gap - 8;
+    let r = road;
+    if (r && cv.textWidth(r, small, fl) > room) { while (r.length > 1 && cv.textWidth(r + '...', small, fl) > room) r = r.slice(0, -1); r = r.replace(/\s+$/, '') + '...'; }
+    const tw = Math.min(room, Math.max(dist ? cv.textWidth(dist, big, fb) : 0, r ? cv.textWidth(r, small, fl) : 0));
+    const x0 = Math.round((w - (s + gap + tw)) / 2);
+    drawArrow(cv, m, x0, 4, s);
+    const tx = x0 + s + gap;
+    if (dist && r) { cv.text(dist, tx, Math.round(h * 0.52), big, '#ffffff', fb); cv.text(r, tx, Math.round(h * 0.86), small, '#ffffff', fl); }
+    else cv.text(dist || r, tx, Math.round(h * 0.5 + big * 0.36), dist ? big : small, '#ffffff', dist ? fb : fl);
+    const px = Buffer.alloc(w * h);
+    for (let i = 0; i < w * h; i++) px[i] = cv.d[i * 4 + 3];
+    return px;
+}
+/** The directions piece: over the map at z, else in the centre panel. */
+function directionsPiece(z) {
+    let last = null;
+    const draw = (d) => {
+        const m = d.nav;
+        if (!m) return null;
+        const key = [m.kind, m.dir, m.exit, m.dist, m.unit, m.road].join('|');
+        if (!last || last.key !== key) last = { key, px: dirPx(m, DIR.w, DIR.h) };
+        return last;
+    };
+    return { key: 'directions', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
+        colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.nav, z, overMap: !!z };
+}
 /** A now-playing text piece: say(media) its text; at: { x, w } across (the centre panel's by default). */
 function npText(key, row, say, colour, at) {
     const X = (at && at.x) || NP.x, Wd = (at && at.w) || NP.w;
@@ -254,7 +339,7 @@ module.exports = {
     title: 'M340i Sport',
     font: 'wide',
     noFont: true,           // (its lettering is the design's own, on its glyph sheet: the engine's glyph atlas is not sent)
-    assets: 10,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+2: the now-playing text lines' pictures)
+    assets: 12,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+2: the now-playing text lines' pictures)
     startKB: 640,           // (about 610 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
     stripGear: true,
     stripFuel: false,
@@ -289,7 +374,7 @@ module.exports = {
             const u = M.over.unit;
             // (the brackets' feet reach into the map's window below the hexagon: drawn again over the map there)
             const fy0 = 536, over = (k, x) => Object.assign(side(k, x, fy0, 48, W2.y + W2.h - fy0, true), { key: k + 'Foot', z: OVER_MAP, overMap: true });
-            list.push({ key: 'mapVeil', kind: 'm340veil', x: W2.x, y: W2.y, w: W2.w, h: W2.h, textures: { u_veil: ART.tex('veil') }, overMap: true },
+            list.push({ key: 'mapVeil', kind: 'm340veil', x: W2.x, y: W2.y, w: W2.w, h: W2.h, textures: { u_veil: ART.tex('veil') }, params: { u_gain: [VEIL_GAIN] }, overMap: true },
                 over('speed', W2.x), over('rpm', W2.x + W2.w - 48),
                 art('unitOver', 'm340art', u[0], u[1], u[2], u[3], A, { cut: true, more: { z: OVER_MAP, overMap: true } }));
         }
@@ -316,6 +401,14 @@ module.exports = {
                 ...line('outsideDigits', 'small', M.at.temp, 'end', 180, (d) => { if (!isNum(d.outside)) return ''; const f = d.outside * 9 / 5 + 32; return (f < 0 ? '-' : '+') + Math.abs(f).toFixed(1); }, 'dim'),
                 // (the drive mode a little above the design's place, clear of the stock warning lights along the bottom middle, y 652 on)
                 ...line('driveName', 'mode', { x: M.at.mode.x, base: 648 }, 'middle', 440, modeName, modeColour, { max: 18 }));
+        }
+        // the next turn while a route runs, at the top of the centre (Settings > Directions)
+        if (!stock && o.directions !== 'off') list.push(directionsPiece(map ? OVER_MAP + 30 : 25));
+        // the badge, top middle between the brackets' top lines (the G20's glass shows the top middle whole)
+        if (o.badge !== 'off') {
+            const b = require('./m340_badge');
+            list.push({ key: 'badge', kind: 'm340text', x: 960 - Math.round(b.BADGE.w / 2), y: 70, w: b.BADGE.w, h: b.BADGE.h, textures: { u_text: b.tex() },
+                colors: (t) => ({ color: [t.fg, 1] }), z: OVER_MAP + 20, overMap: true, topMiddle: true });
         }
         // the song playing, in the centre panel; over the map, one line along its bottom edge, where the map has
         // faded out (the top middle is under the cowl) (Settings > Now playing)

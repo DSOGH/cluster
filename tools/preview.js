@@ -6,7 +6,7 @@
  *
  *   node tools/preview.js [--layout analog_sport] [--look comfort|sport|efficient] [--centre info|stock] [--kmh]
  *                         [--black] [--speed 62] [--rpm 3200] [--gear 4] [--stage D] [--mode S] [--oil 96] [--coolant 90]
- *                         [--mcar] [--strip] [--dap] [--out preview.png]
+ *                         [--mcar] [--strip] [--dap] [--song "t|a|al|s"] [--nav "kind|dir|dist|unit|road[|exit]"] [--out preview.png]
  * --mcar: Settings > Cluster M car, with the M KOMBI's two dark boxes drawn over the layout as on the car
  */
 const fs = require('fs');
@@ -118,12 +118,18 @@ function songOf(v) {
     const [title, artist, album, sec] = String(v).split('|');
     return { title: title || '', artist: artist || '', album: album || '', elapsed: Number(sec) || 0, from: {} };
 }
+/** --nav "kind|dir|dist|unit|road[|exit]": the next turn (data.js d.nav, nav.js's object), e.g. "turn|RIGHT|0.3|mi|Main St". */
+function navOf(v) {
+    if (!v || v === true) return null;
+    const [kind, dir, dist, unit, road, exit] = String(v).split('|');
+    return { kind: kind || 'turn', dir: dir || 'STRAIGHT_ON', dist: dist || null, unit: unit || null, road: road || '', exit: exit ? Number(exit) : null };
+}
 
 if (require.main === module) {
     const a = args(process.argv.slice(2));
     const s = makeScene({ layout: a.layout, look: a.look, black: !!a.black, options: { centre: a.centre, speedUnit: a.kmh ? 'kmh' : 'mph', vehicle: a.engine ? 'ice' : 'phev', cluster: a.mcar ? 'm' : 'standard', bottomStrip: a.strip ? 'stock' : 'layout' },
         data: { speed: a.speed * (a.kmh ? 1 : 1.609344), rpm: a.rpm, gear: a.gear, stage: a.stage, mode: a.mode, driveMode: a.drive, oil: a.oil, coolant: a.coolant, outside: a.outside, soc: a.soc, kw: a.kw, erange: a.erange, frange: a.frange,
-            gearbox: a.gearbox, iat: a.iat, battTemp: a.batt, boostActual: a.boost, torque: 312, timing: 14.5, hpfp: 205, boostTarget: 0.9, engineOn: a.rpm > 300, media: songOf(a.song), tyres: { p: { FL: 2.48, FR: 2.50, RL: 2.62, RR: 2.60 }, t: { FL: 24, FR: 25, RL: 27, RR: 26 } }, fuelPct: a.fuel, pdDrive: 62, pdClimate: 24, pdSeats: 14, dap: a.dap ? require('../apps/cluster_layouts/dap').DEMO : null } });
+            gearbox: a.gearbox, iat: a.iat, battTemp: a.batt, boostActual: a.boost, torque: 312, timing: 14.5, hpfp: 205, boostTarget: 0.9, engineOn: a.rpm > 300, media: songOf(a.song), nav: navOf(a.nav), tyres: { p: { FL: 2.48, FR: 2.50, RL: 2.62, RR: 2.60 }, t: { FL: 24, FR: 25, RL: 27, RR: 26 } }, fuelPct: a.fuel, pdDrive: 62, pdClimate: 24, pdSeats: 14, dap: a.dap ? require('../apps/cluster_layouts/dap').DEMO : null } });
     // let the needles ease to their readings
     // two minutes first, on a made-up clock, so trend lines have a past
     const base = Object.assign({}, s.data()), now = Date.now;

@@ -1,7 +1,9 @@
 The GT3, M and Sport layouts (layout_gt3.js, layout_m.js, layout_sport.js), the M and Sport shaders and line icons
 (MDASH_FS, MTACH_FS, SDASH_FS and LICON_FS in shaders.js, taken from its shared/shaders.js and shared/icons.js), the
 places and font sizes of their texts (bimmer.js) and the tyre readings (shared/data.js) come from or follow
-bimmer-lab's Cluster Themes (https://github.com/bimmer-lab/apps), whose shift scoring comes from cauliflowermossgrape's Redline app:
+bimmer-lab's Cluster Themes (https://github.com/bimmer-lab/apps), whose shift scoring comes from cauliflowermossgrape's Redline app;
+the turn-by-turn decoder (nav.js) and the way directions.js asks for the turns are Redline's
+(https://github.com/cauliflowermossgrape/hdp-apps, apps/redline/nav.js and navlog.js):
 
 MIT License
 

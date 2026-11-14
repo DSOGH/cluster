@@ -72,7 +72,8 @@ function clashes(p, o) {
     const hit = (b) => (round
         ? (() => { const nx = Math.max(b.x, Math.min(cx, b.x + b.w)), ny = Math.max(b.y, Math.min(cy, b.y + b.h)); return (nx - cx) ** 2 + (ny - cy) ** 2 < (r - 6) ** 2; })()
         : p.x < b.x + b.w && p.x + p.w > b.x && p.y < b.y + b.h && p.y + p.h > b.y);
-    if (hit(C.NOTCH)) out.push('under the cowl');
+    // (topMiddle: a piece for a car whose glass shows the top middle whole, the G20's: the M340i's badge)
+    if (!p.topMiddle && hit(C.NOTCH)) out.push('under the cowl');
     // with the car's own bottom strip the KOMBI shows neither box (layout_common.STRIP_Y)
     if (!C.strip(o) && hit(C.GEARBOX_HOLE)) out.push('in the gear box');
     if (!C.strip(o) && hit(C.EDRIVE_HOLE)) out.push('under the eDrive box');

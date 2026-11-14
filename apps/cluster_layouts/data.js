@@ -29,6 +29,7 @@ const { startProviders } = require('./providers');
 const { createFuse } = require('./kwfuse');
 const Awake = require('./kit/awake');
 const Media = require('./media');
+const Directions = require('./directions');
 
 const isNum = (v) => typeof v === 'number' && isFinite(v);
 const PROGRAMS = { S_MINUS_PROGRAMM: 'S', M_MINUS_PROGRAMM: 'M', 1: 'S', 2: 'M' };
@@ -321,13 +322,23 @@ function startData(ctx, opts) {
      * the centre screen's instance, each field's raw value kept for the Signals screen */
     const media = (ctx.spec.signals || {})[Media.IFACE] ? Media.createMedia() : null;
     if (media) {
-        const put = (k, name) => (v) => { fes(name)(v); media.put(k, v); };
+        // (each change of what is read logged, with where each part came from: the log shows why a title is missing)
+        let said = null;
+        const put = (k, name) => (v) => {
+            fes(name)(v); media.put(k, v);
+            const n = media.now(), line = n ? 'title "' + n.title + '" (' + (n.from.title || 'none') + '), artist "' + n.artist + '" (' + (n.from.artist || 'none') + ')' : 'nothing playing';
+            if (line !== said) { said = line; log.info('media: ' + line + ' [' + name + ' ' + (v && typeof v === 'object' ? Object.keys(v).join(',') : String(v)) + ']'); }
+        };
         ctx.signals.watch(Media.IFACE, Media.INSTANCE, {
             playerMetadata: put('pm', 'playerMetadata'), mainMenuMetadata: put('mm', 'mainMenuMetadata'),
             tracks: put('tracks', 'tracks'), trackSelection: put('sel', 'trackSelection'),
         }, log).then((sub) => { status.media = sub && sub.error ? 'error: ' + sub.error : 'subscribed'; log.info('media ' + status.media); })
             .catch((e) => { status.media = 'error: ' + ((e && e.message) || e); log.warn('media: ' + status.media); });
     }
+    /* the next turn while a route runs (directions.js), for an app that declares the guidance interfaces: asked only
+     * while the M340i layout (the one that shows them) is shown with the car on and Settings > Directions is on */
+    const directions = (ctx.spec.signals || {})[Directions.EVENT_LIST.iface]
+        ? Directions.startDirections(ctx, log, { wanted: () => active() && setting('directions') !== 'off' && setting('layout') === 'm340' }) : null;
     watch('de.bmw.infotainment.KombiIF', {
         statusRangeTankStatus: (v) => { fes('statusRangeTankStatus')(v); pickRanges(v); },
         // the cluster's own electric range (in this car's catalog), in the unit the cluster shows: miles on a car
@@ -488,20 +499,22 @@ function startData(ctx, opts) {
             if (x.startWhy) o.startWhy = x.startWhy;
             // the song playing (media.js): { title, artist, album, elapsed } or null
             o.media = d.demo ? DEMO_SONG(tNow) : media ? media.now() : null;
+            // the next turn (directions.js): { kind, dir, exit, dist, unit, road, ... } or null
+            o.nav = d.demo ? null : directions ? directions.now() : null;
             // the cruise control: on with a set speed (the head-up display's), off at 0
             if (!d.demo && Date.now() - (x.at.cruiseSet || 0) < 10000) o.cruise = { on: x.cruiseSet > 0 && x.cruiseSet < 250, set: x.cruiseSet > 0 && x.cruiseSet < 250 ? x.cruiseSet : undefined };
             return o;
         },
         /** The page on screen needs these (data keys): read them fast. */
         want(keys) { wanted = keys.map((k) => (k === 'boostTarget' || k === 'boostActual' ? 'boostCtl' : k === 'gearbox' ? 'egs' : k)); wantedT = Date.now(); },
-        status: () => Object.assign({ car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
+        status: () => Object.assign({ directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
         /** The vehicle in use: { vehicle 'phev' | 'ice', how: 'set' | 'found' | 'assumed', why }. */
         vehicle: () => ({ vehicle: vehicleNow(), how: setting('vehicle') === 'ice' || setting('vehicle') === 'phev' ? 'set' : detected.vehicle ? 'found' : 'assumed', why: detected.why }),
         /** fn() on each new reading (the car's speed and rpm samples, every changed reading). */
         onFresh(fn) { freshFns.push(fn); },
         /** The car's state (kit/awake.js): { on, parked, why }. */
         awake: () => ({ on: awake.on(), parked: awake.parked(), why: awake.why() }),
-        stop() { clearTimeout(timer); clearInterval(wantTimer); clearInterval(vehicleTimer); providers.stop(); },
+        stop() { clearTimeout(timer); clearInterval(wantTimer); clearInterval(vehicleTimer); providers.stop(); if (directions) directions.stop(); },
     };
 }
 

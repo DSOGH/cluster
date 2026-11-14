@@ -1921,9 +1921,10 @@ ${HIGHP}
 uniform vec2 u_size;
 uniform sampler2D u_veil;
 uniform vec2 u_veil_size;
+uniform float u_gain;   /* the design's fade (1) narrowed towards the edges: the map clear over more of the window */
 varying vec2 v_uv;
 void main() {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - texture2D(u_veil, v_uv).r);
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - clamp(texture2D(u_veil, v_uv).r * max(u_gain, 1.0), 0.0, 1.0));
 }`;
 
 module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };

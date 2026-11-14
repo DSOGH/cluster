@@ -78,6 +78,7 @@ mgu.run({
             bottomStrip: settings.get('bottomStrip') === 'layout' ? 'layout' : 'stock',   // the KOMBI's strip under y 660 (layouts.js)
             boxBezel: settings.get('boxBezel') === 'on',   // (off: the box sits on the plain background)
             nowPlaying: settings.get('nowPlaying') === 'off' ? 'off' : 'on',   // (M340i Sport: the song in the centre panel)
+            directions: settings.get('directions') === 'off' ? 'off' : 'on',   // (M340i Sport: the next turn at the top of the centre)
             vehicle: D.vehicle().vehicle,      // set, or found from the car (Auto)
         });
         /** Live: demo data on, or the car's signals answer (a parked car sends nothing new for minutes, so a
@@ -137,7 +138,7 @@ mgu.run({
         settings.onChange((k) => {
             if (k === 'look' || k === 'background') return cluster.recolour();
             if (k === 'layout') layout = byId(settings.get('layout'));
-            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying'].indexOf(k) >= 0) cluster.rebuild();
+            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions'].indexOf(k) >= 0) cluster.rebuild();
         });
 
         /* ---------- the car's range and charge signals, from its own catalog ---------- */
@@ -272,6 +273,8 @@ mgu.run({
                 const f = (m && m.from) || {};
                 cv.text('Read as:  title "' + ((m && m.title) || '') + '"' + (f.title ? ' (' + f.title + ')' : '') + '   ·   artist "' + ((m && m.artist) || '') + '"' + (f.artist ? ' (' + f.artist + ')' : '')
                     + '   ·   album "' + ((m && m.album) || '') + '"', 48, y + 24, 18, t.text, { font: 'bold', literal: true });
+                // the directions (shared/directions.js): whether a route runs, each source, the turns' replies
+                cv.text('Directions: ' + (D.status().directions || '-'), 48, y + 56, 16, t.dim, { font: 'label', literal: true });
                 return ui.image('MAIN_GFX', cv);
             }
             if (page > 3) {

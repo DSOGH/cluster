@@ -2,7 +2,7 @@
   "id": "cluster_layouts",
   "title": "Cluster Layouts",
   "description": "Your own layout on the whole instrument cluster (round dials, gear, temperatures), drawn by the cluster itself",
-  "version": "0.30.2",
+  "version": "0.31.0",
   "startType": "autostart",
   "vendor": "custom",
   "loggingId": "OA9L",
@@ -121,6 +121,36 @@
       "mainMenuMetadata": "rs",
       "tracks": "rs",
       "trackSelection": "rs"
+    },
+    "de.bmw.infotainment.navigation.guiding.Guidance": {
+      "_instances": "Main_Instance",
+      "_optional": "directions on the cluster (M340i Sport): the route, CarPlay's, Android Auto's or BMW's",
+      "guidanceState": "rs",
+      "guidingProvider": "rs",
+      "conclusiveDart": "rs",
+      "currentLaneGuiding": "rs"
+    },
+    "de.bmw.infotainment.navigation.guiding.GuidanceEventList": {
+      "_instances": "Main_Instance",
+      "_optional": "directions on the cluster (M340i Sport): the route, CarPlay's, Android Auto's or BMW's: the turns",
+      "_methods": [
+        "queryContent"
+      ]
+    },
+    "de.bmw.infotainment.navigation.projectedmodeguiding.ProjectedModeGuiding": {
+      "_instances": "Main_Instance",
+      "_optional": "directions on the cluster (M340i Sport): the route, CarPlay's, Android Auto's or BMW's: the phone's lanes",
+      "currentLaneGuiding": "rs"
+    },
+    "de.bmw.infotainment.a4a.carplay.CarPlayManager": {
+      "_instances": "CarPlayManagerInst1",
+      "_optional": "directions on the cluster (M340i Sport): the route, CarPlay's, Android Auto's or BMW's: whether CarPlay is guiding",
+      "projectedGuidanceActive": "rs"
+    },
+    "de.bmw.infotainment.sdi.aap.androidautoprojectedmanager.AndroidAutoProjectedManager": {
+      "_instances": "AndroidAutoProjectedManagerInst1",
+      "_optional": "directions on the cluster (M340i Sport): the route, CarPlay's, Android Auto's or BMW's: whether Android Auto is guiding",
+      "projectedGuidanceActive": "rs"
     }
   },
   "screens": [
@@ -423,6 +453,22 @@
         [
           "on",
           "The song playing, in the centre panel"
+        ],
+        [
+          "off",
+          "Off"
+        ]
+      ]
+    },
+    {
+      "key": "directions",
+      "label": "Directions (M340i Sport)",
+      "type": "choice",
+      "default": "on",
+      "options": [
+        [
+          "on",
+          "The next turn at the top of the centre, while a route runs"
         ],
         [
           "off",

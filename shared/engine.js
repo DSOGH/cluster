@@ -316,7 +316,7 @@ function startCluster(opts) {
 
     /**
      * A gliding value's new reading: the cluster plays a straight line from where the value stands now to the
-     * reading, over about the time between the car's readings, and holds it there. One message a reading, none
+     * reading, over about the time between the car's readings, and holds it there. Two messages a reading (the start, the glide), none
      * between; the motion is the cluster's own, at its frame rate.
      */
     function glide(p, want, max, now) {
@@ -330,6 +330,10 @@ function startCluster(opts) {
         const f = g.ms ? Math.min(1, (now - g.at) / g.ms) : 1, at = g.from + (g.to - g.from) * f;
         const ms = Math.round(Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, g.gap || GLIDE_MIN_MS)));
         const v = (x) => Math.round(x * 10000) / 10000;
+        // the value the layer holds set to where the glide starts first: the renderer puts a replaced animation's
+        // value back to it (and a republished scene starts from it), so between two glides the fill stays where it
+        // is instead of dropping to the last value set (0 since the start-up sweep), seen as a flutter on the car
+        cr.uniform(p.ref, 'u_value', [v(at)]);
         g.anim = cr.animate(p.ref, { property: 'uniform', name: 'u_value', keys: '0:' + v(at) + ' ' + ms + ':' + v(want), loop: false, anim: g.anim }) || g.anim;
         g.from = at; g.to = want; g.at = now; g.ms = ms;
         p.value = want; p.sent = want;
