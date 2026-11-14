@@ -119,6 +119,14 @@ if (glyph === 'gauge') {
     c.circle(41, 72, 11, W);
     for (const [y0, y1] of [[52, 38], [72, 72], [92, 106]]) c.line(80, y0, 124, y1, 6, W);
     c.polyline([[50, 6], [40, 22], [52, 22], [42, 38]], 5, '#ffad1f');
+} else if (glyph === 'fuel') {
+    // a fuel pump with its hose, and a drop split white / blue (gasoline and E85)
+    c.strokeRoundRect(18, 20, 56, 102, 8, 6, W);
+    c.roundRect(28, 32, 36, 26, 4, W);
+    c.fillRect(10, 116, 72, 7, W);
+    c.polyline([[74, 40], [96, 40], [104, 52], [104, 92], [96, 100]], 5, W);
+    c.circle(112, 104, 16, A);
+    c.circle(112, 104, 9, B);
 } else {
     c.strokeRoundRect(14, 14, 112, 112, 22, 6, W);
     c.text(glyph, 70, 88, 56, W, { font: 'bold', align: 'center' });

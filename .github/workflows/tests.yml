@@ -19,6 +19,7 @@ jobs:
       - run: node kit/tools/test_runtime.js
       - run: node kit/tools/test_cluster_info_overlay.js
       - run: node kit/tools/test_cluster_info.js
+      - run: node kit/tools/test_flex_fuel.js
       # test_logs decodes the Logs screen's QR codes from simulated photos with OpenCV
       - uses: actions/setup-python@v5
         with:
