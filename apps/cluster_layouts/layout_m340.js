@@ -12,7 +12,7 @@
  *   - the speed and the gear in the design's lettering: D (or S) alone while the gearbox shifts itself, the gear's
  *     number alone (1-8) in manual, P, R or N;
  *   - the fuel bar, and the oil bar on BMW's oil temperature scale (160 / 250 / 340 °F);
- *   - with the engine off READY stands where the rev scale's 0 is; the 0 comes back when it runs;
+ *   - with the engine off and the car standing READY stands where the rev scale's 0 is; the 0 comes back when it runs;
  *   - with the Waze map in the centre the map fills the brackets' hexagon behind the gauges, its edges feathered
  *     as in the design (the veil), the gauges and figures over it;
  *   - without the car's own bottom strip: the design's bottom row too (time, range, outside temperature, and the
@@ -56,7 +56,9 @@ function speedFrac(v) {
     for (let i = 1; i < m.length; i++) if (v <= m[i]) return (i - 1 + (v - m[i - 1]) / (m[i] - m[i - 1])) / (m.length - 1);
     return 1;
 }
-const running = (d) => d.engineOn !== false;
+/** The engine-on look (the revs' 0, no READY): all but READY (data.js d.ready: the engine off with the car standing;
+ * rolling with the engine stopped, sailing down a hill, keeps the driving look, the revs at 0). */
+const running = (d) => (d.ready !== undefined ? !d.ready : d.engineOn !== false);
 const rpmFrac = (d) => (running(d) && isNum(d.rpm) ? clamp01(d.rpm / RPM_MAX) : 0);
 /** The gear: the letter alone in D and S, the number alone in manual, P / R / N as they are. */
 function gearShort(d) {

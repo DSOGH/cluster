@@ -1,6 +1,7 @@
 'use strict';
 /**
- * map_window.js - tells Waze on cluster (waze-on-cluster 0.9.107 or later) where the layout's map window is, so it
+ * map_window.js - tells Waze on cluster where the layout's map window is (0.9.107 or later reads it itself; for 0.9.14
+ * the m340-waze-window tool, native/m340_waze_window, restarts it there), so it
  * draws the map in the layout's own target (panel), on top of the layout and filling the window. In the map slot
  * under the layout the KOMBI draws its own map screen over the map (its speed readout, its edge shading, its
  * vignette), which showed through the window.

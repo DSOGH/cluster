@@ -2,7 +2,7 @@
   "id": "cluster_layouts",
   "title": "Cluster Layouts",
   "description": "Your own layout on the whole instrument cluster (round dials, gear, temperatures), drawn by the cluster itself",
-  "version": "0.31.0",
+  "version": "0.32.0",
   "startType": "autostart",
   "vendor": "custom",
   "loggingId": "OA9L",
@@ -1110,7 +1110,8 @@
   "requires": {
     "idrive7-renderd": "2.1.7",
     "mgu-inputgate": "1.0.0",
-    "cluster-render": "0.4.2"
+    "cluster-render": "0.4.2",
+    "m340-waze-window": "0.2.0"
   },
   "shared": true
 }

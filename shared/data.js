@@ -31,6 +31,8 @@ const Awake = require('./kit/awake');
 const Media = require('./media');
 const Directions = require('./directions');
 
+const READY_MS = 1000;   // the engine off and the car standing this long: READY (d.ready)
+
 const isNum = (v) => typeof v === 'number' && isFinite(v);
 const PROGRAMS = { S_MINUS_PROGRAMM: 'S', M_MINUS_PROGRAMM: 'M', 1: 'S', 2: 'M' };
 const DME_KEYS = ['iat', 'hpfp', 'lpfp', 'timing', 'boostCtl', 'egs'];
@@ -442,6 +444,7 @@ function startData(ctx, opts) {
     /* The battery's power between eDrive Live's readings (kwfuse.js): its readings fitted to the power at the wheels
      * from the car's speed and acceleration, many times a second. Settings > kW: Fast (the default) or Readings only. */
     let lastKwAt = null;
+    let readySince = 0;   // (the engine off with the car standing since then: d.ready)
     const fastKw = () => setting('kwFast') !== 'off';
     let shownFor = 0;
     const vehicleTimer = setInterval(() => {
@@ -497,6 +500,11 @@ function startData(ctx, opts) {
             o.fuelPct = isNum(o.fuelLevel) ? Math.max(0, Math.min(100, o.fuelLevel / tank * 100)) : undefined;
             if (o.engineOn === undefined && Date.now() - (x.at.engineState || 0) < 60000) o.engineOn = x.engineState === 'on';
             if (x.startWhy) o.startWhy = x.startWhy;
+            // READY: the engine off with the car standing, held for READY_MS. Not while it rolls: the 48 V B58 stops the
+            // engine coasting down a hill (sailing) and starts it again, and the cluster stays as it is driving then
+            const offStanding = o.engineOn === false && !(isNum(o.speed) && o.speed >= 3);
+            if (!offStanding) readySince = 0; else if (!readySince) readySince = tNow;
+            o.ready = offStanding && tNow - readySince >= READY_MS;
             // the song playing (media.js): { title, artist, album, elapsed } or null
             o.media = d.demo ? DEMO_SONG(tNow) : media ? media.now() : null;
             // the next turn (directions.js): { kind, dir, exit, dist, unit, road, ... } or null

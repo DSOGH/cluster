@@ -1,0 +1,14 @@
+[Unit]
+Description=m340-waze-window: the Waze on cluster map in a Cluster Layouts layout's window while one shows it (DSOGH/cluster)
+After=waze-on-cluster.service local-fs.target
+
+[Service]
+# Root: it writes a runtime drop-in for waze-on-cluster.service and restarts it when the layout's window comes
+# and goes (watch.js). It changes nothing else.
+ExecStart=/usr/bin/node /var/opt/m340-waze-window/current/watch.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target
