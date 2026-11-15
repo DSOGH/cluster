@@ -366,7 +366,7 @@ module.exports = {
     font: 'wide',
     noFont: true,           // (its lettering is the design's own, on its glyph sheet: the engine's glyph atlas is not sent)
     assets: 13,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+5: the song's two text lines and its artwork, the next turn, the badge)
-    startKB: 640,           // (about 610 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
+    startKB: 680,           // (about 640 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
     stripGear: true,
     stripFuel: false,
     ownStripGauges: true,
