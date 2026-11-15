@@ -187,10 +187,12 @@ EXTRAS = r'''
 
 
 # the figures and letters the layout writes (speed, gear, time, range, temperature, drive mode) in a face close to
-# BMW's own cluster figures (a 4 open at the top): Titillium Web SemiBold (SIL Open Font License, tools/m340/fonts),
+# BMW's own cluster figures (a 4 open at the top): Titillium Web Bold (SIL Open Font License, tools/m340/fonts),
 # set at the design font's cap height, so each set keeps the design's size. M340_FIGURES_FONT=none keeps the
 # design's own glyphs.
-FIGURES_FONT = os.environ.get('M340_FIGURES_FONT', os.path.join(HERE, 'm340', 'fonts', 'TitilliumWeb-SemiBold.ttf'))
+FIGURES_FONT = os.environ.get('M340_FIGURES_FONT', os.path.join(HERE, 'm340', 'fonts', 'TitilliumWeb-Bold.ttf'))
+# each set's size against the design's (the owner's ask: the speed and the gear larger, as a BMW cluster's)
+FIGURES_GROW = {'sp': 1.3, 'gr': 1.3, 'sm': 1.0, 'md': 1.08}
 FIGURES = '0123456789:.+-' + ''.join(sorted(set('PRNDSM' + ''.join(MODES)) - {' '}))
 
 
@@ -257,6 +259,8 @@ async def shots():
         await snap('veil')
         await pg.evaluate('__back()')
         sc = await pg.evaluate(EXTRAS, extra_glyphs())
+        if FIGURES_FONT != 'none':
+            sc = {k: v * FIGURES_GROW.get(k, 1.0) for k, v in sc.items()}
         meta['sc'] = sc
         meta['geo'] = await pg.evaluate(GEO, H)
         # --- the glyph pages
