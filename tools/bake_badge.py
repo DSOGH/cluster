@@ -1,9 +1,9 @@
-"""Bake the M340i layout's badge ("M340" at the top, in Pirulen, the design's numerals' face) as an r8 picture:
+"""Bake the M340i layout's badge ("M340" at the top, in Pirulen, the design's numerals' face, slanted forward) as an r8 picture:
 python3 tools/bake_badge.py Pirulen.ttf  ->  apps/cluster_layouts/m340_badge.js (the font file is not kept here)."""
 import base64, os, sys, zlib
 from PIL import Image, ImageDraw, ImageFont
 
-TEXT, SIZE, TRACK, PAD = 'M340', 34, 6, 4
+TEXT, SIZE, TRACK, PAD, SLANT = 'M340', 36, 5, 4, 0.24   # SLANT: the forward lean, x per y
 font = ImageFont.truetype(sys.argv[1], SIZE)
 W = sum(font.getbbox(c)[2] for c in TEXT) + TRACK * (len(TEXT) - 1) + 2 * PAD + 40
 img = Image.new('L', (W, SIZE * 2), 0)
@@ -12,6 +12,9 @@ x = PAD
 for c in TEXT:
     d.text((x, PAD), c, font=font, fill=255)
     x += font.getlength(c) + TRACK
+# leaned forward: each row moved right by SLANT for each row above the baseline
+img = img.crop((0, 0, img.width + int(SLANT * img.height) + 2, img.height))
+img = img.transform(img.size, Image.AFFINE, (1, SLANT, -SLANT * img.height, 0, 1, 0), resample=Image.BICUBIC)
 box = img.getbbox()
 img = img.crop((max(0, box[0] - PAD), max(0, box[1] - PAD), box[2] + PAD, box[3] + PAD))
 w, h = img.size

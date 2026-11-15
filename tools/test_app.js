@@ -24,6 +24,9 @@ process.env.CLUSTER_INFO_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-'));
 process.env.CLUSTER_SETTLE_MS = '0';
     process.env.CLUSTER_PRESENCE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-'));
 const SPEC = JSON.parse(fs.readFileSync(path.join(APP, 'app.json'), 'utf8'));
+// the app's spec on the car: build.py's runtime app-spec.json, without the signals
+const RT_SPEC = {};
+['id', 'title', 'version', 'screens', 'settings', 'config', 'startWidget'].forEach((k) => { RT_SPEC[k] = SPEC[k]; });
 const themes = require(path.join(KIT, 'themes'));
 const { Recorder: Canvas } = require(path.join(KIT, 'record'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -33,14 +36,14 @@ const check = (name, fn) => { fn(); ok++; console.log('ok   ' + name); };
 (async () => {
     const S = {}, changes = [];
     SPEC.settings.forEach((s) => { S[s.key] = s.default; });
-    const handlers = {}, clicks = {}, warns = [];
+    const handlers = {}, clicks = {}, warns = [], watched = [];
     let pages = 0;
     const ctx = {
         app: {}, ui: { onClick(n, fn) { clicks[n] = fn; }, text() {}, image: async () => { pages++; } },
         settings: { get: (k) => S[k], set: (k, v) => { S[k] = v; changes.forEach((f) => f(k, v)); }, onChange(f) { changes.push(f); }, display: (k) => String(S[k]) },
         log: { info() {}, warn: (m) => warns.push(m), error: (m, e) => warns.push(m + ' ' + e) },
-        spec: SPEC, dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'cl-')),
-        signals: { watch: (iface, inst, h) => { Object.assign(handlers, h); return Promise.resolve({ available: true }); },
+        spec: RT_SPEC, dataDir: fs.mkdtempSync(path.join(os.tmpdir(), 'cl-')),
+        signals: { watch: (iface, inst, h) => { watched.push(iface); Object.assign(handlers, h); return Promise.resolve({ available: true }); },
             proxy: () => Promise.reject(new Error('no TASU here')), on: () => Promise.resolve(), onAvailable: () => Promise.resolve() },
         loop() {}, theme: () => themes.theme('m_tricolour'), canvas: (w, h) => new Canvas(w, h),
     };
@@ -51,6 +54,10 @@ const check = (name, fn) => { fn(); ok++; console.log('ok   ' + name); };
     check('every signal the app reads is declared in app.json', () => {
         const declared = [].concat(...Object.keys(SPEC.signals).map((i) => Object.keys(SPEC.signals[i])));
         Object.keys(handlers).forEach((h) => assert(declared.indexOf(h) >= 0, h));
+    });
+    check('the song and the directions are read with the spec the car has (no signals in it)', () => {
+        ['de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', 'de.bmw.infotainment.navigation.guiding.Guidance',
+            'de.bmw.infotainment.a4a.carplay.CarPlayManager'].forEach((i) => assert(watched.indexOf(i) >= 0, i));
     });
     const eng = () => require(path.join(APP, 'engine')).startCluster.last;
     check('off by default: no layers at all (the stock cluster shows)', () => {

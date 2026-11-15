@@ -320,9 +320,10 @@ function startData(ctx, opts) {
             if (p && p !== carPress) { carPress = p; log.info('car pressure unit: ' + p); }
         },
     }, 'units', { pollMs: 60000 });
-    /* the song the car's media player shows (media.js), for an app that declares the interface (Cluster Layouts):
+    /* the song the car's media player shows (media.js), for an app that asks for it (opts.media: Cluster Layouts, which
+     * declares the interface; the runtime spec on the car does not carry the declarations):
      * the centre screen's instance, each field's raw value kept for the Signals screen */
-    const media = (ctx.spec.signals || {})[Media.IFACE] ? Media.createMedia() : null;
+    const media = opts.media ? Media.createMedia() : null;
     if (media) {
         // (each change of what is read logged, with where each part came from: the log shows why a title is missing)
         let said = null;
@@ -337,9 +338,9 @@ function startData(ctx, opts) {
         }, log).then((sub) => { status.media = sub && sub.error ? 'error: ' + sub.error : 'subscribed'; log.info('media ' + status.media); })
             .catch((e) => { status.media = 'error: ' + ((e && e.message) || e); log.warn('media: ' + status.media); });
     }
-    /* the next turn while a route runs (directions.js), for an app that declares the guidance interfaces: asked only
+    /* the next turn while a route runs (directions.js), for an app that asks for it (opts.directions): asked only
      * while the M340i layout (the one that shows them) is shown with the car on and Settings > Directions is on */
-    const directions = (ctx.spec.signals || {})[Directions.EVENT_LIST.iface]
+    const directions = opts.directions
         ? Directions.startDirections(ctx, log, { wanted: () => active() && setting('directions') !== 'off' && setting('layout') === 'm340' }) : null;
     watch('de.bmw.infotainment.KombiIF', {
         statusRangeTankStatus: (v) => { fes('statusRangeTankStatus')(v); pickRanges(v); },

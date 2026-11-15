@@ -57,7 +57,7 @@ mgu.run({
         const showing = () => settings.get('show') === 'on';
         // every reading (data.js, shared with Cluster Centre): the car's signals, the engine unit over UDS for
         // what a layout needs (layout.needs), eDrive Live's charge and power while shown
-        const D = startData(ctx, { shown: showing, tyres: true });
+        const D = startData(ctx, { shown: showing, tyres: true, media: true, directions: true });
         const car = D.car;
         // the driving assistant (dap.js), for the layouts that show it (layout.dap: Modern wide's road, Sport's
         // cruise control): subscribed once one is first shown
