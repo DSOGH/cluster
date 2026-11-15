@@ -328,6 +328,7 @@ function startData(ctx, opts) {
      * the centre screen's instance, each field's raw value kept for the Signals screen */
     const media = opts.media ? Media.createMedia() : null;
     // the song's cover art (cover.js: online, or the head unit's own copy; Settings > Cover art)
+    const mediaList = { tracks: null, sel: null };
     const cover = media && opts.cover ? Cover.startCover({ dataDir: ctx.dataDir, log, mode: () => setting('coverArt') || 'both' }) : null;
     if (media) {
         // (each change of what is read logged, with where each part came from: the log shows why a title is missing)
@@ -336,6 +337,8 @@ function startData(ctx, opts) {
             fes(name)(v); media.put(k, v);
             const n = media.now();
             if (cover) cover.song(n ? n.title : '', n ? n.artist : '');
+            // (the next songs' covers fetched ahead, from the player's list)
+            if (cover && (k === 'tracks' || k === 'sel')) { mediaList[k] = v; cover.prefetch(Media.nextTracks(mediaList.tracks, mediaList.sel, 2)); }
             const line = n ? 'title "' + n.title + '" (' + (n.from.title || 'none') + '), artist "' + n.artist + '" (' + (n.from.artist || 'none') + ')' : 'nothing playing';
             // (the values themselves too, shortened: what the player sends)
             if (line !== said) { said = line; log.info('media: ' + line + ' [' + name + ' ' + (v && typeof v === 'object' ? JSON.stringify(v).slice(0, 600) : String(v)) + ']'); }

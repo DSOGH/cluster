@@ -54,4 +54,18 @@ check('no badge; the gear lever\'s place with the layout\'s bottom row', () => {
     assert(!ps.some((p) => p.key === 'badge'));
     assert(ps.some((p) => p.key === 'selAll') && ps.some((p) => p.key === 'selLit'));
 });
+check('the renderer backed up: only the newest of each value waits, sent in order when it drains (no seconds-old queue)', () => {
+    const { ClusterRender } = require('../shared/cluster_render_client');
+    const cr = new ClusterRender('t'), sent = [];
+    let full = false;
+    cr.sock = { write: (m) => { sent.push(String(m)); return !full; } };
+    cr.connected = true; cr.ready = true;
+    cr.layers.set(1, { kind: 'effect', uniforms: {}, anims: new Map(), nextAnim: 1 });
+    full = true; cr.uniform(1, 'u_value', [0.1]);          // (this write fills the socket)
+    for (let i = 2; i <= 9; i++) { cr.uniform(1, 'u_value', [i / 10]); cr.animate(1, { property: 'uniform', name: 'u_value', keys: '0:0 50:' + i / 10, anim: 1 }); }
+    assert.strictEqual(sent.length, 1, 'nothing more written while backed up');
+    full = false; cr.blocked = false; cr._flushLatest();
+    assert.strictEqual(sent.length, 3);
+    assert(/"v":"0.9"/.test(sent[1]) && /50:0.9/.test(sent[2]), sent.slice(1).join(' | '));
+});
 console.log(ok + ' passed');

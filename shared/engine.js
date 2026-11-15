@@ -48,7 +48,8 @@ const SH = require('./shaders');
 const { rgb } = require('./themes');
 
 const DEFAULT_TARGET = 'panel';
-const RATE_HZ = 60;          // value updates a second (a frame of the cluster's 60 Hz), and at once on a new reading
+const RATE_HZ = 30;          // value updates a second, and at once on a new reading (the gauges glide on the cluster itself: a
+                             // faster timer only spends the head unit's time)
 const TEXT_HZ = 60;          // text and colour updates a second at most: every frame, sent only when they change
 const STALE_MS = 3000;
 const TAU_MS = 10;           // a needle's easing towards its reading: most of the way there in the frame it comes
@@ -76,8 +77,9 @@ const TIMED = { car: true, leds: true, flag: true, eagles: true, fireworks: true
 const HIST = 64;
 /* the most layers up at once while one set replaces another (the service allows 64 an app) */
 const MAX_AT_ONCE = 60;
-/* car data gone for this long before the layout hides (a moment's gap would drop and resend every layer) */
-const LIVE_GRACE_MS = 1500;
+/* car data gone for this long before the layout hides (a gap, as a busy head unit makes, would drop and resend every
+ * layer, and the cluster would blink off and on) */
+const LIVE_GRACE_MS = 10000;
 /* wanted this long without a break before the layers go up (a start, or after being hidden) */
 const SETTLE_MS = 1200;
 

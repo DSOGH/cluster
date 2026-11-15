@@ -10,8 +10,8 @@
  * waze-on-cluster.service (-s target=panel -s map_rect=X,Y,W,H, or none) and restarts it. /run is empty at each
  * head-unit start: Waze on cluster starts in its own place, and moves once the layout shows.
  *
- *   - a change counts once it has held ON_MS (a window) or OFF_MS (none): a rebuilt layout or a restarted app
- *     restarts nothing;
+ *   - a change counts once it has held ON_MS (a window) or OFF_MS (none): a rebuilt layout, a restarted app or a
+ *     busy moment restarts nothing;
  *   - what runs is read from the running process's command line, so a restart is only made when it differs;
  *   - no two restarts within GAP_MS (the map comes back a few seconds after each).
  */
@@ -23,7 +23,7 @@ const WINDOW = process.env.MAP_WINDOW_FILE || '/dev/shm/cluster-info/map_window.
 const UNIT = 'waze-on-cluster.service';
 const DROPIN_DIR = '/run/systemd/system/' + UNIT + '.d';
 const DROPIN = path.join(DROPIN_DIR, 'zz-m340-waze-window.conf');
-const FRESH_MS = 4000, ON_MS = 2000, OFF_MS = 5000, GAP_MS = 15000, TICK_MS = 1000;
+const FRESH_MS = 15000, ON_MS = 2000, OFF_MS = 20000, GAP_MS = 15000, TICK_MS = 1000;   // (a busy head unit can leave the window file a few seconds old: no restart for that)
 const FALLBACK_EXEC = '/var/opt/waze-on-cluster/current/waze-on-cluster -c /var/opt/waze-on-cluster/current/waze-on-cluster.conf $WOC_SRC_CROP';
 const SYSTEMCTL = ['/bin/systemctl', '/usr/bin/systemctl'].find((f) => { try { fs.accessSync(f); return true; } catch (e) { return false; } }) || 'systemctl';
 
@@ -39,7 +39,10 @@ const log = (m) => console.log(new Date().toISOString() + ' ' + m);
  */
 const INFO = path.dirname(WINDOW);
 const COVER_SKIP = /^\/(proc|sys|dev(?!\/shm)|dev\/shm\/cluster-info)(\/|$)|\/(\.git|node_modules|lost\+found)(\/|$)|\/data\/covers(\/|$)/;   // (data/covers: the app's own kept covers)
-const COVER_SETTLE_MS = 2500, COVER_AGAIN_MS = 6000, COVER_RECENT_MS = 20000, COVER_MAX_ENTRIES = 120000, COVER_SLICE = 2000, COVER_KEEP = 5;
+const COVER_SETTLE_MS = 2500, COVER_AGAIN_MS = 6000, COVER_RECENT_MS = 20000, COVER_MAX_ENTRIES = 40000, COVER_SLICE = 400, COVER_KEEP = 5;
+// (the folders a running system writes to; read-only system folders left out, and the search done in small slices
+// with pauses: it must not hold up the cluster or the map)
+const COVER_ROOTS = ['/var', '/tmp', '/run', '/dev/shm', '/opt', '/mnt', '/home', '/persistence', '/data'];
 const cover = { key: '', job: 0 };
 function imageKind(f) {
     try {
@@ -49,7 +52,7 @@ function imageKind(f) {
     } catch (e) { return false; }
 }
 function coverScan(key, at, tries) {
-    const job = cover.job, found = [], stack = [[process.env.COVER_ROOT || '/', 0]];   // (the variable: the tests)
+    const job = cover.job, found = [], stack = (process.env.COVER_ROOT ? [process.env.COVER_ROOT] : COVER_ROOTS).map((r) => [r, 0]);   // (the variable: the tests)
     let seen = 0;
     const step = () => {
         if (job !== cover.job) return;
@@ -67,7 +70,7 @@ function coverScan(key, at, tries) {
                 if (st.isDirectory()) { if (depth < 12) stack.push([f, depth + 1]); } else if (st.isFile() && st.mtimeMs >= at - COVER_RECENT_MS && st.size >= 1500 && st.size <= 4 * 1024 * 1024) found.push([f, st.mtimeMs, st.size]);
             }
         }
-        if (stack.length && seen < COVER_MAX_ENTRIES) { setTimeout(step, 2); return; }
+        if (stack.length && seen < COVER_MAX_ENTRIES) { setTimeout(step, 15); return; }
         const imgs = found.filter(([f]) => imageKind(f)).sort((a, b) => b[1] - a[1]).slice(0, COVER_KEEP);
         if (!imgs.length && tries > 0) { setTimeout(() => { if (job === cover.job) coverScan(key, at, tries - 1); }, COVER_AGAIN_MS); return; }
         const src = [];

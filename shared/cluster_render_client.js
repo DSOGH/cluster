@@ -140,6 +140,7 @@ class ClusterRender extends EventEmitter {
     }
 
     _open() {
+        this.latest = null;   // (a new connection replays the layers' uniforms and animations itself)
         if (this.closed || this.sock) return;
         const sock = net.connect(this.path);
         this.sock = sock;
@@ -169,7 +170,7 @@ class ClusterRender extends EventEmitter {
         /* A socket close() let go is not this.sock any more: its late events
          * are ignored. */
         sock.on('data', (d) => { if (this.sock === sock) this._data(d); });
-        sock.on('drain', () => { if (this.sock === sock) { this.blocked = false; this._pump(); } });
+        sock.on('drain', () => { if (this.sock === sock) { this.blocked = false; this._flushLatest(); this._pump(); } });
         sock.on('error', () => {});
         sock.on('close', () => {
             if (this.sock !== sock) return;
@@ -226,6 +227,23 @@ class ClusterRender extends EventEmitter {
     }
 
     _send(obj) { this._write(jsonMessage(obj)); }
+
+    /* A value that only its newest matters (a uniform, an animation, under `key`): while the socket is backed up it
+     * waits, replacing the one waiting before it, and goes when the socket drains. So a busy renderer gets the
+     * newest readings, never a queue of old ones played seconds late. */
+    _sendLatest(key, obj) {
+        if (!this.sock || !this.connected) return;
+        if (this.blocked) { if (!this.latest) this.latest = new Map(); this.latest.delete(key); this.latest.set(key, obj); return; }
+        this._send(obj);
+    }
+    _flushLatest() {
+        if (!this.latest || !this.latest.size) return;
+        for (const [key, obj] of Array.from(this.latest.entries())) {
+            if (this.blocked) break;
+            this.latest.delete(key);
+            this._send(obj);
+        }
+    }
 
     _write(m) {
         if (!this.sock || !this.connected) return;
@@ -371,7 +389,7 @@ class ClusterRender extends EventEmitter {
         } else if ((l.kind !== 'effect' && l.kind !== 'mesh') || values.length > 4) return;
         if (o.part) m.part = o.part;
         l.uniforms[(o.part || 0) + ':' + name] = m;
-        this._send(m);
+        this._sendLatest('u|' + ref + '|' + (o.part || 0) + '|' + name, m);
     }
 
     /* The effect layer's (or mesh part's) sampler samples the asset. */
@@ -448,7 +466,7 @@ class ClusterRender extends EventEmitter {
         if (opts.part) m.part = opts.part;
         if (opts.name) m.name = opts.name;
         l.anims.set(anim, m);
-        this._send(m);
+        this._sendLatest('a|' + ref + '|' + anim, m);
         return anim;
     }
 

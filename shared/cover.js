@@ -11,7 +11,9 @@
  *              few to /dev/shm/cluster-info/cover0.img ... (cover.json: the song, where each came from). The app
  *              asks by writing cover_request.json there.
  *
- * Each song is asked once; what came of it is logged and shown on the Signals screen (status()).
+ * Each song is asked once (Online, else the head unit's: the head unit only when online found none); what came of
+ * it is logged and shown on the Signals screen (status()). The next songs in the player's list are fetched ahead
+ * (prefetch), so their covers show at once.
  *
  *   const c = startCover({ dataDir, log, mode: () => 'both' });
  *   c.song(title, artist)   // the song changed;  c.now() -> { key, px } or null;  c.status()
@@ -160,21 +162,31 @@ function startCover(opts) {
     const keyOf = (t, a) => (t + '\n' + a).toLowerCase();
     const file = (k) => cacheDir && path.join(cacheDir, require('crypto').createHash('sha1').update(k).digest('hex').slice(0, 16) + '.img');
     const take = (job, px, from) => { if (job !== st.job || !px) return false; st.px = px; st.from = from; st.line = 'cover: ' + from; log.info('cover: ' + from); return true; };
-    function online(job, title, artist, key) {
+    /** A song's cover from iTunes: done(err, image bytes); kept in the cache. */
+    const inFlight = new Set();
+    function fetchCover(title, artist, key, done) {
+        inFlight.add(key);
+        const fin = (e, img) => { inFlight.delete(key); done(e, img); };
         const q = encodeURIComponent((artist ? artist + ' ' : '') + title);
         get('https://itunes.apple.com/search?media=music&entity=song&limit=8&term=' + q, (e, b) => {
-            if (job !== st.job) return;
             let url = null;
             try { url = !e && artworkUrl(JSON.parse(b.toString('utf8')), title, artist); } catch (x) { url = null; }
-            if (!url) { if (!st.px) st.line = 'cover: online, ' + (e ? e.message : 'not found'); return; }
+            if (!url) { fin(e || new Error('not found')); return; }
             get(url, (e2, img) => {
-                if (job !== st.job || e2) { if (e2 && !st.px) st.line = 'cover: online, ' + e2.message; return; }
-                const px = fromBytes(img);
-                if (px && !st.px) {
-                    take(job, px, 'online (iTunes)');
-                    try { if (cacheDir) { try { fs.mkdirSync(cacheDir); } catch (x) { /* there */ } fs.writeFileSync(file(key), img); prune(); } } catch (x) { /* not kept */ }
-                }
+                if (e2) { fin(e2); return; }
+                try { if (cacheDir) { try { fs.mkdirSync(cacheDir); } catch (x) { /* there */ } fs.writeFileSync(file(key), img); prune(); } } catch (x) { /* not kept */ }
+                fin(null, img);
             });
+        });
+    }
+    function online(job, title, artist, key, fallback) {
+        fetchCover(title, artist, key, (e, img) => {
+            if (job !== st.job) return;
+            const px = img ? fromBytes(img) : null;
+            if (px) { if (!st.px) take(job, px, 'online (iTunes)'); return; }
+            if (!st.px) st.line = 'cover: online, ' + (e ? e.message : 'not a picture');
+            // (Online, else the head unit's: only when online found none)
+            if (fallback) fallback();
         });
     }
     function prune() {
@@ -210,8 +222,22 @@ function startCover(opts) {
             const job = st.job;
             // a cover fetched before
             if (cacheDir && (m === 'online' || m === 'both')) { const px = load(file(key)); if (px) { take(job, px, 'online (kept)'); return; } }
-            if (m === 'headunit' || m === 'both') headUnit(job, key, Date.now());
-            if ((m === 'online' || m === 'both') && title) online(job, title, artist, key);
+            const at = Date.now();
+            if (m === 'headunit' || !title) { if (m !== 'online') headUnit(job, key, at); return; }
+            online(job, title, artist, key, m === 'both' ? () => headUnit(job, key, at) : null);
+        },
+        /** The songs likely next (the player's list after the playing one): their covers fetched ahead and kept, so
+         * each shows the moment its song starts. */
+        prefetch(songs) {
+            const m = mode();
+            if (!cacheDir || (m !== 'online' && m !== 'both') || !uplinkDns().length) return;
+            (songs || []).slice(0, 2).forEach((x) => {
+                if (!x || !x.title) return;
+                const key = keyOf(x.title, x.artist || '');
+                if (inFlight.has(key)) return;
+                try { if (fs.existsSync(file(key))) return; } catch (e) { return; }
+                fetchCover(x.title, x.artist || '', key, () => {});
+            });
         },
         now: () => (st.px ? { key: st.key + '|' + st.from, px: st.px } : null),
         status: () => st.line,

@@ -36,7 +36,7 @@ check('the window: taken while fresh, as Cluster Layouts writes it (the M340i\'s
     assert.strictEqual(W.wanted(), null);
     fs.writeFileSync(WIN, 'panel ' + META.window.join(' ') + '\n');
     assert.strictEqual(W.wanted(), META.window.join(','));
-    const old = (Date.now() - 10000) / 1000; fs.utimesSync(WIN, old, old);
+    const old = (Date.now() - 30000) / 1000; fs.utimesSync(WIN, old, old);
     assert.strictEqual(W.wanted(), null);
     fs.writeFileSync(WIN, 'map 1 2 3\n');
     assert.strictEqual(W.wanted(), null);

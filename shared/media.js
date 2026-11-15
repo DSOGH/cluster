@@ -77,4 +77,11 @@ function createMedia(clock) {
     };
 }
 
-module.exports = { createMedia, pick, ITEM, IFACE: 'de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', INSTANCE: 'HMI_CID' };
+/** The n songs after the playing one in the player's list (`tracks`, `sel` as put): [{ title, artist }]. */
+function nextTracks(tracks, sel, n) {
+    const list = trackList(tracks), id = sel && sel.selectedTrackId;
+    const i = id === undefined ? -1 : list.findIndex((t) => t && String(t.trackId) === String(id));
+    return i < 0 ? [] : list.slice(i + 1, i + 1 + n).map((t) => ({ title: clean(t.firstLine), artist: clean(t.secondLine) })).filter((t) => t.title);
+}
+
+module.exports = { createMedia, pick, nextTracks, ITEM, IFACE: 'de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', INSTANCE: 'HMI_CID' };

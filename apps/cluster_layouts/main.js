@@ -72,11 +72,11 @@ mgu.run({
         /* the Waze centre only while Waze on cluster shows its map (its /run/waze-on-cluster/status.json, written each
          * second: state 'showing'); otherwise the layout's own centre (the M colours), never the stock cluster's map
          * screen behind an empty window. A change counts once held WAZE_ON_MS (on) or WAZE_OFF_MS (off). */
-        const WOC_STATUS = '/run/waze-on-cluster/status.json', WAZE_ON_MS = 3000, WAZE_OFF_MS = 8000;
+        const WOC_STATUS = '/run/waze-on-cluster/status.json', WAZE_ON_MS = 3000, WAZE_OFF_MS = 20000, WAZE_STALE_MS = 15000;
         const waze = { on: false, cand: false, since: 0 };
         const wazeShowing = () => {
             try {
-                if (Date.now() - require('fs').statSync(WOC_STATUS).mtimeMs > 5000) return false;
+                if (Date.now() - require('fs').statSync(WOC_STATUS).mtimeMs > WAZE_STALE_MS) return false;
                 return JSON.parse(require('fs').readFileSync(WOC_STATUS, 'utf8')).state === 'showing';
             } catch (e) { return false; }
         };
@@ -135,7 +135,10 @@ mgu.run({
         let lastVehicle = null, lastModeGear = null;
         // the engine-unit readings the layout shows, read fast while it shows
         setInterval(() => {
-            if (showing()) D.want((layout.needs || []).concat(require('./layout_common').focus.needs(options())));
+            // (a boost gauge: the engine unit's own boost, read by diagnostics; the sport display's figure only moves while
+            // the car's sport displays are up)
+            const o_ = options(), boostGauge = ['sideLeft', 'sideRight', 'dialLeft', 'dialRight'].some((k) => o_[k] === 'boost');
+            if (showing()) D.want((layout.needs || []).concat(require('./layout_common').focus.needs(o_), boostGauge ? ['boostActual'] : []));
             // Cluster Centre steps aside while a layout shows
             if (cluster.status().shown) presence.mark('layouts', { centre: options().centre });
             // the Waze centre: Waze on cluster draws its map over the layout, filling the window (map_window.js): the
@@ -176,7 +179,8 @@ mgu.run({
         let page = 0;   // 0: status; 1...: the signal list, SIGNALS_PER_PAGE a page
         // 0: status; 1: the raw drive-mode and range values; 2: what the cluster has up; 3...: the signal list
         // (status, the drive mode and ranges, the cluster's report, the song playing, then the signal list)
-        const pages = () => 5 + Math.ceil(found.list.length / SIGNALS_PER_PAGE);   // (4: the side gauges' preview)
+        const pages = () => 6 + Math.ceil(found.list.length / SIGNALS_PER_PAGE);   // (4: the side gauges' preview, 5: performance)
+        const perf = require('./perf').startPerf();
 
         /* the side gauges' preview (Signals, page 5): each side's gauge as the cluster draws it, with the car's reading
          * now (or a sample while parked), the warnings and the 0-60 best below */
@@ -215,6 +219,36 @@ mgu.run({
                 if (side === 'left') { one(bar, x0, false); one(dial, x0 + 110, true); } else { one(dial, x0 + 380, true); one(bar, x0 + 640, false); }
             });
             cv.text('Warnings: ' + (D.status().warnings || '-'), 48, 490, 16, t.dim, { font: 'label', literal: true });
+            return cv;
+        }
+        /* the head unit's load (Signals, page 6): CPU, memory and the GPU's clock over the last three minutes, the
+         * busiest processes now, and this app's own cluster work */
+        function perfPage(cv, t) {
+            const n = perf.now(), h = perf.history(), top = perf.top(9);
+            cv.text('Performance   ·   the head unit now', 48, 60, 24, t.text, { font: 'bold', literal: true });
+            const pct = (v) => (v === null || v === undefined ? '-' : Math.round(v * 100) + ' %');
+            const graph = (x, y, w, gh, key, colour, label, value) => {
+                cv.roundRect(x, y, w, gh, 8, t.track);
+                const pts = h.map((s, i) => [x + (h.length > 1 ? i / (90 - 1) : 0) * w, y + gh - 4 - (s[key] || 0) * (gh - 8)]);
+                for (let i = 1; i < pts.length; i++) if (h[i][key] !== null && h[i - 1][key] !== null) cv.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], 3, colour);
+                cv.text(label, x, y - 10, 18, t.dim, { font: 'bold', literal: true });
+                cv.text(value, x + w, y - 10, 18, t.text, { font: 'bold', literal: true, align: 'right' });
+            };
+            graph(48, 110, 480, 110, 'cpu', '#3cd7ff', 'CPU (' + n.cores + ' cores)', pct(n.cpu) + '   load ' + n.load);
+            graph(48, 270, 480, 110, 'mem', '#ffb020', 'Memory', Math.round(n.memUsed / 1024) + ' of ' + Math.round(n.memTotal / 1024) + ' MB');
+            graph(48, 430, 480, 70, 'gpu', '#3ddc84', 'GPU clock', n.gpuMhz !== null ? Math.round(n.gpuMhz) + ' of ' + Math.round(n.gpuMax || 0) + ' MHz' : 'not readable here');
+            // the busiest processes (each its share of all cores, its memory)
+            cv.text('Busiest now', 600, 100, 18, t.dim, { font: 'bold', literal: true });
+            top.forEach((p, i) => {
+                const y = 136 + i * 36;
+                cv.roundRect(600, y - 22, Math.max(4, 300 * Math.min(1, p.cpu * 2)), 28, 6, t.track);
+                cv.text(String(p.name).slice(0, 34), 612, y, 18, t.text, { font: 'bold', literal: true });
+                cv.text((p.cpu * 100).toFixed(1) + ' %', 1240, y, 18, t.text, { font: 'bold', literal: true, align: 'right' });
+                cv.text(Math.round(p.rss / 1024) + ' MB', 1360, y, 18, t.dim, { font: 'label', literal: true, align: 'right' });
+            });
+            // this app's own cluster work: its updates' time each, and whether the renderer keeps up
+            const st = cluster.status(), ep = (cluster.perf && cluster.perf()) || null;
+            cv.text('This app: ' + (st.shown ? st.layers + ' layers on the cluster' : 'the cluster not shown') + (ep ? '   ·   an update ' + ep.avgMs.toFixed(1) + ' ms (most ' + ep.maxMs.toFixed(0) + ' ms)' : ''), 600, 480, 18, t.dim, { font: 'label', literal: true });
             return cv;
         }
         ui.onClick('BTN_SHOW', () => { settings.set('show', showing() ? 'off' : 'on'); return render(); });
@@ -344,9 +378,10 @@ mgu.run({
                 return ui.image('MAIN_GFX', cv);
             }
             if (page === 4) return ui.image('MAIN_GFX', widgetsPage(cv, t));
-            if (page > 4) {
-                cv.text('Signals on this car for ranges, fuel and charge (' + found.list.length + ')   ·   page ' + (page - 4) + ' of ' + (pages() - 5), 48, 70, 26, t.text, { font: 'bold', literal: true });
-                found.list.slice((page - 5) * SIGNALS_PER_PAGE, (page - 4) * SIGNALS_PER_PAGE).forEach((s, i) => {
+            if (page === 5) return ui.image('MAIN_GFX', perfPage(cv, t));
+            if (page > 5) {
+                cv.text('Signals on this car for ranges, fuel and charge (' + found.list.length + ')   ·   page ' + (page - 5) + ' of ' + (pages() - 6), 48, 70, 26, t.text, { font: 'bold', literal: true });
+                found.list.slice((page - 6) * SIGNALS_PER_PAGE, (page - 5) * SIGNALS_PER_PAGE).forEach((s, i) => {
                     const y = 130 + i * 54;
                     cv.text(s.iface.replace(/^de\.bmw\./, '') + '  ·  ' + s.field + (s.get ? '  get' : '') + (s.notify ? '  notify' : ''), 48, y, 20, t.text, { font: 'label', literal: true });
                     cv.text(s.members.slice(0, 10).join(', ').slice(0, 150), 72, y + 24, 16, t.dim, { font: 'label', literal: true });
