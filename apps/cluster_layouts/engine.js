@@ -24,7 +24,7 @@
  *     min                                 the lowest value passed on (0 unless set: a power gauge's regeneration),
  *     range(d) -> [min, max]              instead, the lowest and highest now (a tach that reads kW in an electric drive),
  *     sweep: true                         part of the start-up sweep,
- *     live: { name, w, h, draw(d) }       a picture the piece samples (uniform `name`, one byte a pixel) that changes
+ *     live: { name, w, h, draw(d), format } a picture the piece samples (uniform `name`, one byte a pixel; format 'rgba8': four) that changes
  *                                         with the data: draw(d) gives { key, px } (px w * h bytes), or null: nothing
  *                                         to show (sent nothing; the piece hides itself with visible(d));
  *                                         sent only when the key changes, the asset kept across rebuilds
@@ -57,10 +57,15 @@ const EPS = 0.0015;          // a value moving less than this (of its max) is no
 const SWEEP_MS = 700;        // up, then as long back down
 /* a gliding value (glide: true): each new reading reached over about the time the readings come apart (measured),
  * within these bounds; a gap longer than GLIDE_GAP_MS is a pause, not a rate */
-const GLIDE_MIN_MS = 30, GLIDE_MAX_MS = 140, GLIDE_GAP_MS = 400;
+const GLIDE_MIN_MS = 30, GLIDE_MAX_MS = 180, GLIDE_GAP_MS = 400;
+/* each glide a little longer than the time between readings (GLIDE_OVERLAP), so the next reading comes while the
+ * value still moves: one continuous motion through a run of readings, no stop and start at each (the stutter); a fall
+ * to 0 from above GLIDE_DROP_FROM of the scale (the engine stopping) takes GLIDE_DROP_MS, the needle sinking as a
+ * cluster's does */
+const GLIDE_OVERLAP = 1.25, GLIDE_DROP_MS = 650, GLIDE_DROP_FROM = 0.04;
 const FS = { flat: SH.FLAT_FS, panel: SH.PANEL_FS, dial: SH.DIAL_FS, band: SH.BAND_FS, text: SH.TEXT_FS, bg: SH.BG_FS, icon: SH.ICON_FS, spark: SH.SPARK_FS, car: SH.CAR_FS, leds: SH.LEDS_FS, flag: SH.FLAG_FS, eagles: SH.EAGLE_FS, fireworks: SH.FIREWORKS_FS, road: SH.ROAD_FS, chevron: SH.CHEVRON_FS, mdash: SH.MDASH_FS, mtach: SH.MTACH_FS, sdash: SH.SDASH_FS, licon: SH.LICON_FS, e9x: SH.E9X_FS, mbar: SH.MBAR_FS,
-    m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS, m340text: SH.M340TEXT_FS };
-const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950, m340text: 20 };
+    m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS, m340text: SH.M340TEXT_FS, m340img: SH.M340IMG_FS };
+const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950, m340text: 20, m340img: 20 };
 /* how far below z 0 the pieces under the Waze map go (opts.underMap): the lowest (-210) stays above -1000 */
 const UNDER_MAP_Z = 600;
 /* kinds that animate (u_time): their clock sent from the head unit every frame (values()) */
@@ -199,7 +204,7 @@ function startCluster(opts) {
                 const id = 'live:' + s.key;
                 let tx = textures.get(id);
                 if (!tx || tx.img.w !== s.live.w || tx.img.h !== s.live.h) {
-                    tx = { ref: cr.asset({ target: TARGET, format: 'r8', w: s.live.w, h: s.live.h, sampling: 'bilinear' }), img: { w: s.live.w, h: s.live.h }, key: null };
+                    tx = { ref: cr.asset({ target: TARGET, format: s.live.format || 'r8', w: s.live.w, h: s.live.h, sampling: 'bilinear' }), img: { w: s.live.w, h: s.live.h }, key: null };
                     textures.set(id, tx);
                 }
                 cr.bind(ref, s.live.name, tx.ref);
@@ -328,7 +333,8 @@ function startCluster(opts) {
         g.seen = now;
         // where the value stands now, partway along the last glide
         const f = g.ms ? Math.min(1, (now - g.at) / g.ms) : 1, at = g.from + (g.to - g.from) * f;
-        const ms = Math.round(Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, g.gap || GLIDE_MIN_MS)));
+        const drop = want <= max * 0.002 && at > max * GLIDE_DROP_FROM;
+        const ms = drop ? GLIDE_DROP_MS : Math.round(Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, (g.gap || GLIDE_MIN_MS) * GLIDE_OVERLAP)));
         const v = (x) => Math.round(x * 10000) / 10000;
         // the value the layer holds set to where the glide starts first: the renderer puts a replaced animation's
         // value back to it (and a republished scene starts from it), so between two glides the fill stays where it

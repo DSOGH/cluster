@@ -186,24 +186,43 @@ EXTRAS = r'''
 '''
 
 
-def extra_glyphs():
-    """Outlines of the letters the mode names need beyond the prototype's set, from the design's font."""
+# the figures and letters the layout writes (speed, gear, time, range, temperature, drive mode) in a face close to
+# BMW's own cluster figures (a 4 open at the top): Titillium Web SemiBold (SIL Open Font License, tools/m340/fonts),
+# set at the design font's cap height, so each set keeps the design's size. M340_FIGURES_FONT=none keeps the
+# design's own glyphs.
+FIGURES_FONT = os.environ.get('M340_FIGURES_FONT', os.path.join(HERE, 'm340', 'fonts', 'TitilliumWeb-SemiBold.ttf'))
+FIGURES = '0123456789:.+-' + ''.join(sorted(set('PRNDSM' + ''.join(MODES)) - {' '}))
+
+
+def outlines(path, chars, cap=None):
+    """{char: [advance, ink left, ink right, SVG path]} in font units, scaled to cap height `cap` when given."""
     from fontTools.ttLib import TTFont
     from fontTools.pens.svgPathPen import SVGPathPen
     from fontTools.pens.boundsPen import BoundsPen
-    path = os.environ.get('M340_FONT', '/mnt/user-data/uploads/Pirulen-W05-Bold.ttf')
-    if not os.path.exists(path):
-        return {}
+    from fontTools.pens.transformPen import TransformPen
     f = TTFont(path)
     gs, cm = f.getGlyphSet(), f.getBestCmap()
+    k = cap / f['OS/2'].sCapHeight if cap else 1.0
     out = {}
-    for c in EXTRA_GLYPHS:
+    for c in chars:
         n = cm[ord(c)]
         p = SVGPathPen(gs, ntos=lambda v: '%d' % round(v))
-        gs[n].draw(p)
+        gs[n].draw(TransformPen(p, (k, 0, 0, k, 0, 0)))
         b = BoundsPen(gs)
         gs[n].draw(b)
-        out[c] = [f['hmtx'][n][0], round(b.bounds[0]), round(b.bounds[2]), p.getCommands()]
+        out[c] = [round(f['hmtx'][n][0] * k), round(b.bounds[0] * k), round(b.bounds[2] * k), p.getCommands()]
+    return out
+
+
+def extra_glyphs():
+    """Outlines of the letters the mode names need beyond the prototype's set, from the design's font; then every
+    figure and letter in the figures' face (FIGURES_FONT), at the design font's cap height."""
+    from fontTools.ttLib import TTFont
+    path = os.environ.get('M340_FONT', '/mnt/user-data/uploads/Pirulen-W05-Bold.ttf')
+    out = outlines(path, EXTRA_GLYPHS) if os.path.exists(path) else {}
+    if FIGURES_FONT != 'none':
+        cap = TTFont(path)['OS/2'].sCapHeight if os.path.exists(path) else 704
+        out.update(outlines(FIGURES_FONT, FIGURES, cap))
     return out
 
 

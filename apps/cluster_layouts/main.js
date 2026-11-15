@@ -275,6 +275,8 @@ mgu.run({
                     + '   ·   album "' + ((m && m.album) || '') + '"', 48, y + 24, 18, t.text, { font: 'bold', literal: true });
                 // the directions (shared/directions.js): whether a route runs, each source, the turns' replies
                 cv.text('Directions: ' + (D.status().directions || '-'), 48, y + 56, 16, t.dim, { font: 'label', literal: true });
+                // the artwork (shared/artwork.js): where it was found, or what the search looked at
+                cv.text('Artwork: ' + String(D.status().artwork || '-').slice(0, 150), 48, y + 80, 16, t.dim, { font: 'label', literal: true });
                 return ui.image('MAIN_GFX', cv);
             }
             if (page > 3) {

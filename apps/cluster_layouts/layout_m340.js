@@ -8,7 +8,7 @@
  * shaders add only what moves, with the prototype's own geometry:
  *   - each bracket's channel lit from the reading down in the design's gradient, over its tick marks and out to
  *     both lines, running into the bottom line; a white bar across it at the reading (always, at 0 too);
- *   - the scale numeral nearest the reading in its lit form (white, a little larger, a glow);
+ *   - the last scale numeral the reading has reached in its lit form (white, a little larger, a glow);
  *   - the speed and the gear in the design's lettering: D (or S) alone while the gearbox shifts itself, the gear's
  *     number alone (1-8) in manual, P, R or N;
  *   - the fuel bar, and the oil bar on BMW's oil temperature scale (160 / 250 / 340 °F);
@@ -134,10 +134,11 @@ function side(k, x, y, w, h, hex) {
             // (glide: the cluster plays the fill's motion between the car's readings, at its own frame rate)
             value: frac, max: 1, sweep: true, glide: true,
             colors: () => ({ c0: g[k][0][1], c1: g[k][1][1] }),
-            // the numeral nearest the reading lit; with the engine off the revs' 0 blank (READY stands there)
+            // the last numeral the reading has reached lit (1 from 1000 rpm up to 1999); with the engine off the revs' 0
+            // blank (READY stands there)
             dyn: (d) => {
                 if (k === 'rpm' && !running(d)) return { u_box: [M.cover[0], M.cover[1], M.cover[0] + M.cover[2], M.cover[1] + M.cover[3]], u_boxTo: [0, 0, 2] };
-                const b = boxes[Math.max(0, Math.min(8, Math.round(frac(d) * 8)))];
+                const b = boxes[Math.max(0, Math.min(8, Math.floor(frac(d) * 8 + 1e-6)))];
                 return { u_box: b.slice(0, 4), u_boxTo: [b[4], b[5], 1] };
             },
         },
@@ -206,10 +207,13 @@ function line(key, set, at, align, room, say, colour, o) {
  * from when the song changed: the car gives no position or length). The two text lines are drawn on the head unit
  * in the kit's fonts (any script) and sent as pictures when the song changes ('m340text', live).
  */
-const NP = { x: 660, w: 600, title: { y: 438, h: 50, size: 36, font: 'bold' }, sub: { y: 490, h: 36, size: 24, font: 'label' }, timeBase: 556 };
+/* the song: its artwork at the left, the title and the artist beside it (Titillium Web, baked for the head unit's canvas:
+ * tw, twb), the time played below; in the centre panel, or along the bottom of the map's window over the map */
+const NP = { art: { x: 670, y: 430, s: 124 }, x: 812, w: 448, title: { y: 430, h: 56, size: 42, font: 'twb' }, sub: { y: 488, h: 40, size: 28, font: 'tw' }, timeBase: 558 };
+const NP_MAP = { art: { x: 664, y: 526, s: 76 }, x: 758, w: 500, title: { y: 526, h: 42, size: 30, font: 'twb' }, sub: { y: 566, h: 34, size: 22, font: 'tw' } };
 let Canvas = null;
-/** A line of text as one byte a pixel (its coverage), w x h, centred, cut with "..." when too long. */
-function textPx(str, w, h, size, font) {
+/** A line of text as one byte a pixel (its coverage), w x h, centred (left: from the left), cut with "..." when too long. */
+function textPx(str, w, h, size, font, left) {
     if (!Canvas) Canvas = require('./kit/canvas').Canvas;
     const cv = new Canvas(w, h), o = { font, literal: true };
     let s = String(str);
@@ -217,7 +221,7 @@ function textPx(str, w, h, size, font) {
         while (s.length > 1 && cv.textWidth(s + '...', size, o) > w - 8) s = s.slice(0, -1);
         s = s.replace(/\s+$/, '') + '...';
     }
-    cv.text(s, w / 2, Math.round(h * 0.5 + size * 0.36), size, '#ffffff', Object.assign({ align: 'center' }, o));
+    cv.text(s, left ? 2 : w / 2, Math.round(h * 0.5 + size * 0.36), size, '#ffffff', Object.assign({ align: left ? 'left' : 'center' }, o));
     const px = Buffer.alloc(w * h);
     for (let i = 0; i < w * h; i++) px[i] = cv.d[i * 4 + 3];
     return px;
@@ -227,7 +231,7 @@ function textPx(str, w, h, size, font) {
  * drawn on the head unit as one picture when the turn or its distance changes ('m340text', live), at the top of the
  * centre, over the map.
  */
-const DIR = { x: 640, y: 140, w: 640, h: 104 };
+const DIR = { x: 640, y: 10, w: 640, h: 104 };   // (the top middle, the badge's place: the badge shows when no route runs)
 /** The arrow's bend in degrees (0 straight on, negative to the left), or null: no arrow (a roundabout, the destination). */
 function turnAngle(m) {
     const d = String(m.dir || ''), left = /LEFT/.test(d), right = /RIGHT/.test(d), side = left ? -1 : right ? 1 : 0;
@@ -255,7 +259,7 @@ function drawArrow(cv, m, x, y, s) {
     if (m.kind === 'roundabout') {   // the ring, the way in from below, the exit's number in the ring
         cv.arc(cx, y + s * 0.42, s * 0.22, s * 0.34, 0, 360, c);
         cv.line(cx, base, cx, y + s * 0.76, W, c);
-        if (m.exit) cv.text(String(m.exit), cx, y + s * 0.42 + s * 0.12, Math.round(s * 0.32), c, { font: 'bold', align: 'center', literal: true });
+        if (m.exit) cv.text(String(m.exit), cx, y + s * 0.42 + s * 0.12, Math.round(s * 0.32), c, { font: 'twb', align: 'center', literal: true });
         return;
     }
     const a = turnAngle(m), mid = y + s * 0.5;
@@ -279,7 +283,7 @@ function dirPx(m, w, h) {
     if (!Canvas) Canvas = require('./kit/canvas').Canvas;
     const cv = new Canvas(w, h), s = h - 8, gap = 18;
     const dist = m.dist ? m.dist + ' ' + m.unit : '', road = m.road || (m.kind === 'destination' ? 'Destination' : '');
-    const big = 46, small = 24, fb = { font: 'bold', literal: true }, fl = { font: 'label', literal: true };
+    const big = 50, small = 26, fb = { font: 'twb', literal: true }, fl = { font: 'tw', literal: true };
     const room = w - s - gap - 8;
     let r = road;
     if (r && cv.textWidth(r, small, fl) > room) { while (r.length > 1 && cv.textWidth(r + '...', small, fl) > room) r = r.slice(0, -1); r = r.replace(/\s+$/, '') + '...'; }
@@ -293,7 +297,7 @@ function dirPx(m, w, h) {
     for (let i = 0; i < w * h; i++) px[i] = cv.d[i * 4 + 3];
     return px;
 }
-/** The directions piece: over the map at z, else in the centre panel. */
+/** The directions piece: the top middle, over everything (z). */
 function directionsPiece(z) {
     let last = null;
     const draw = (d) => {
@@ -304,27 +308,47 @@ function directionsPiece(z) {
         return last;
     };
     return { key: 'directions', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
-        colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.nav, z, overMap: !!z };
+        colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.nav, z, overMap: true, topMiddle: true };
 }
-/** A now-playing text piece: say(media) its text; at: { x, w } across (the centre panel's by default). */
+/** A now-playing text piece: say(media) its text, from the left of `at` (a card: NP or NP_MAP; at.z over the map). */
 function npText(key, row, say, colour, at) {
-    const X = (at && at.x) || NP.x, Wd = (at && at.w) || NP.w;
+    const X = at.x, Wd = at.w;
     let last = null;
     const draw = (d) => {
         const str = d.media ? say(d.media) : '';
         if (!str) return null;
-        if (!last || last.key !== str) last = { key: str, px: textPx(str, Wd, row.h, row.size, row.font) };
+        if (!last || last.key !== str) last = { key: str, px: textPx(str, Wd, row.h, row.size, row.font, true) };
         return last;
     };
     return { key, kind: 'm340text', x: X, y: row.y, w: Wd, h: row.h, live: { name: 'u_text', w: Wd, h: row.h, draw },
         colors: (t) => ({ color: [t[colour], 1] }), visible: (d) => !!(d.media && say(d.media)), z: at && at.z, overMap: !!(at && at.z) };
 }
-function nowPlaying() {
+/** The artwork's placeholder (no artwork found): a dark tile with a note. */
+let notePx = null;
+function placeholderPx(s) {
+    if (notePx) return notePx;
+    if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+    const cv = new Canvas(s, s).clear('#1b2433'), c = '#7d8aa3';
+    cv.circle(s * 0.38, s * 0.66, s * 0.1, c); cv.circle(s * 0.66, s * 0.6, s * 0.1, c);
+    cv.line(s * 0.47, s * 0.66, s * 0.47, s * 0.3, s * 0.05, c); cv.line(s * 0.75, s * 0.6, s * 0.75, s * 0.24, s * 0.05, c);
+    cv.line(s * 0.47, s * 0.3, s * 0.75, s * 0.24, s * 0.07, c);
+    notePx = { key: 'note', px: Buffer.from(cv.d) };
+    return notePx;
+}
+/** The song's artwork (data.js d.media.art: 128 x 128 RGBA, artwork.js), its corners rounded; the placeholder without. */
+function npArt(at) {
+    const S = 128, a = at.art;
+    const draw = (d) => (d.media ? (d.media.art || placeholderPx(S)) : null);
+    return { key: 'npArt', kind: 'm340img', x: a.x, y: a.y, w: a.s, h: a.s, live: { name: 'u_img', w: S, h: S, format: 'rgba8', draw },
+        params: { u_round: [Math.round(a.s * 0.1)] }, visible: (d) => !!d.media, z: at.z, overMap: !!at.z };
+}
+function nowPlaying(at) {
     const time = (d) => { if (!d.media) return ''; const e = Math.floor(d.media.elapsed); return Math.floor(e / 60) + ':' + String(e % 60).padStart(2, '0'); };
     return [
-        npText('npTitle', NP.title, (m) => m.title || m.artist, 'fg'),
-        npText('npSub', NP.sub, (m) => (m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album), 'dim'),
-        ...line('npTime', 'small', { x: NP.x + NP.w / 2, base: NP.timeBase }, 'middle', 140, time, 'dim', { more: { visible: (d) => !!d.media } }),
+        npArt(at),
+        npText('npTitle', at.title, (m) => m.title || m.artist, 'fg', at),
+        npText('npSub', at.sub, (m) => (m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album), 'dim', at),
+        ...(at.timeBase ? line('npTime', 'small', { x: at.x + 2, base: at.timeBase }, 'start', 140, time, 'dim', { more: { visible: (d) => !!d.media } }) : []),
     ];
 }
 
@@ -341,7 +365,7 @@ module.exports = {
     title: 'M340i Sport',
     font: 'wide',
     noFont: true,           // (its lettering is the design's own, on its glyph sheet: the engine's glyph atlas is not sent)
-    assets: 12,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+2: the now-playing text lines' pictures)
+    assets: 13,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+5: the song's two text lines and its artwork, the next turn, the badge)
     startKB: 640,           // (about 610 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
     stripGear: true,
     stripFuel: false,
@@ -405,18 +429,19 @@ module.exports = {
                 ...line('driveName', 'mode', { x: M.at.mode.x, base: 648 }, 'middle', 440, modeName, modeColour, { max: 18 }));
         }
         // the next turn while a route runs, at the top of the centre (Settings > Directions)
-        if (!stock && o.directions !== 'off') list.push(directionsPiece(map ? OVER_MAP + 30 : 25));
+        if (!stock && o.directions !== 'off') list.push(directionsPiece(OVER_MAP + 30));
         // the badge, top middle between the brackets' top lines (the G20's glass shows the top middle whole)
         if (o.badge !== 'off') {
             const b = require('./m340_badge');
             list.push({ key: 'badge', kind: 'm340text', x: 960 - Math.round(b.BADGE.w / 2), y: 70, w: b.BADGE.w, h: b.BADGE.h, textures: { u_text: b.tex() },
-                colors: (t) => ({ color: [t.fg, 1] }), z: OVER_MAP + 20, overMap: true, topMiddle: true });
+                colors: (t) => ({ color: [t.fg, 1] }), z: OVER_MAP + 20, overMap: true, topMiddle: true,
+                // (a route's next turn stands in its place)
+                visible: (d) => !(o.directions !== 'off' && d.nav) });
         }
         // the song playing, in the centre panel; over the map, one line along its bottom edge, where the map has
         // faded out (the top middle is under the cowl) (Settings > Now playing)
         if (!stock && o.nowPlaying !== 'off') {
-            if (!map) list.push(...nowPlaying());
-            else list.push(npText('npLine', { y: 560, h: 40, size: 26, font: 'label' }, (m) => [m.title, m.artist].filter(Boolean).join('  ·  '), 'fg', { x: 700, w: 520, z: OVER_MAP + 30 }));
+            list.push(...nowPlaying(map ? Object.assign({ z: OVER_MAP + 30 }, NP_MAP) : NP));
         }
         if (stock) return list.filter((p) => p.kind === 'flat' || p.x + p.w <= 566 || p.x >= 1104);
         return list;

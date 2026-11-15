@@ -1915,6 +1915,20 @@ void main() {
     gl_FragColor = vec4(u_color.rgb, u_color.a * texture2D(u_text, v_uv).r);
 }`;
 
+/** A picture in colour (u_img, RGBA: the song's artwork), its corners rounded by u_round (px), its size u_size. */
+const M340IMG_FS = `#version 100
+${HIGHP}
+uniform sampler2D u_img;
+uniform vec2 u_size;
+uniform float u_round;
+varying vec2 v_uv;
+void main() {
+    vec2 p = v_uv * u_size, q = abs(p - u_size * 0.5) - (u_size * 0.5 - vec2(u_round));
+    float d = length(max(q, 0.0)) - u_round;
+    vec4 c = texture2D(u_img, v_uv);
+    gl_FragColor = vec4(c.rgb, c.a * clamp(0.5 - d, 0.0, 1.0));
+}`;
+
 /** The map's veil: black over the map's window, clear where the map shows (u_veil: how much, the design's feathered edges). */
 const M340VEIL_FS = `#version 100
 ${HIGHP}
@@ -1927,4 +1941,4 @@ void main() {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - clamp(texture2D(u_veil, v_uv).r * max(u_gain, 1.0), 0.0, 1.0));
 }`;
 
-module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };
+module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, M340IMG_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };
