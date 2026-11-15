@@ -30,6 +30,12 @@ check('side gauges: each kind, the bars alone or with the round ones beside them
         assert(L.pieces(o).length <= 60);
     })));
 });
+check('Waze\'s own turn card: with the map, nothing of the layout over the top of the phone\'s safe area (504x368 at 286,72 of the map: Waze draws its next turn there)', () => {
+    const W = L.mapWindow, card = { x: W.x + 286, y: W.y + 72, w: 504, h: 360 };   // (a warning may cover its last rows)
+    const o = O({ centre: 'map', sideLeft: 'boost', sideRight: 'hp', dialLeft: 'oil', dialRight: 'coolant', nowPlaying: 'on', directions: 'on' });
+    const over = L.pieces(o).filter((p) => p.overMap && p.key !== 'mapVeil' && p.key !== 'warning' && p.x < card.x + card.w && p.x + p.w > card.x && p.y < card.y + card.h && p.y + p.h > card.y);
+    assert(!over.length, JSON.stringify(over.map((p) => [p.key, p.x, p.y, p.w, p.h])));
+});
 check('side gauge readings: hp from torque and revs, at the wheels less the loss; boost in psi', () => {
     const r = L.sideReading('hp', O({}), { rpm: 5000, torque: 500 });
     assert.strictEqual(r.text, '351'); assert.strictEqual(r.unit, 'HP');

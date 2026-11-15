@@ -41,6 +41,21 @@ function car(answer) {
         assert(m, 'a turn'); assert.deepStrictEqual([m.kind, m.dir, m.dist, m.unit, m.road], ['turn', 'RIGHT', '0.3', 'mi', 'Main St']);
         d.stop();
     });
+    await check('Waze guiding (CarPlay says so, no turns in the replies): said on the Signals page; a turn clears it', async () => {
+        let ans = { viewContent: [{ eventsInView: [] }] };
+        const c = car(() => ans), d = startDirections({ signals: c.signals }, null, { silentMs: 1500 });
+        await wait(10);
+        c.h.projectedGuidanceActive(true);
+        await wait(2700);
+        assert.strictEqual(d.silent(), true); assert(/no turns sent/.test(d.status()), d.status()); assert.strictEqual(d.now(), null);
+        ans = reply('LEFT', '200', 'METER', 'Elm St');
+        await wait(1200);
+        assert.strictEqual(d.silent(), false); assert(d.now(), 'a turn');
+        c.h.projectedGuidanceActive(false);
+        await wait(10);
+        assert.strictEqual(d.silent(), false);
+        d.stop();
+    });
     await check('not wanted (another layout, Settings off): nothing asked, nothing shown', async () => {
         const c = car(() => reply('LEFT', '500', 'FEET', 'Lake St')), d = startDirections({ signals: c.signals }, null, { wanted: () => false });
         await wait(10);

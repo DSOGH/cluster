@@ -214,7 +214,7 @@ function line(key, set, at, align, room, say, colour, o) {
  * is found (Settings > Cover art), as one picture drawn on the head unit at each change, centred on the display, low in the centre panel; over the map, along the bottom
  * edge of its window, where the map has faded out */
 const NP = { x: 560, y: 488, w: 800, h: 64, title: 24, sub: 16 };
-const NP_MAP = { x: 610, y: 560, w: 700, h: 46, title: 18, sub: 13 };
+const NP_MAP = { x: 610, y: 568, w: 700, h: 40, title: 17, sub: 12 };   // (under the phone's safe area, y 200 to 568 on the panel: Waze's turn card is drawn in it)
 let Canvas = null;
 /** A line of text as one byte a pixel (its coverage), w x h, centred (left: from the left), cut with "..." when too long. */
 function textPx(str, w, h, size, font, left) {
