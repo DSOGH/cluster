@@ -27,7 +27,7 @@ function clashes(p, o) {
         if (!C.strip(o) && inB(C.EDRIVE_HOLE)) out.push('under the eDrive box');
         if (C.strip(o) && pts.some(([, y]) => y > C.STRIP_Y)) out.push('over the strip');
         if (C.mCar(o) && C.M_HOLES.some(inB)) out.push('in an M box');
-        if (inB(C.TELLTALES)) out.push('over the warning lights');
+        if (!p.overTelltales && inB(C.TELLTALES)) out.push('over the warning lights');
         if (pts.some(([x, y]) => C.inCorner(x, y))) out.push('in a corner');
         return out;
     }
@@ -62,7 +62,7 @@ function clashes(p, o) {
         if (!C.strip(o) && inB(C.EDRIVE_HOLE)) out.push('under the eDrive box');
         if (C.strip(o) && pts.some(([, y]) => y > C.STRIP_Y)) out.push('over the strip');
         if (C.mCar(o) && C.M_HOLES.some(inB)) out.push('in an M box');
-        if (inB(C.TELLTALES)) out.push('over the warning lights');
+        if (!p.overTelltales && inB(C.TELLTALES)) out.push('over the warning lights');
         if (pts.some(([x, y]) => C.inCorner(x, y))) out.push('in a corner');
         if (o && o.centre === 'map' && inB(C.MAP)) out.push('over the map');
         return out;
@@ -80,7 +80,7 @@ function clashes(p, o) {
     if (C.strip(o) && !round && p.y + p.h > C.STRIP_Y) out.push('over the strip');
     if (C.strip(o) && round && cy + r - 6 > C.STRIP_Y + 4) out.push('over the strip');
     if (C.mCar(o) && C.M_HOLES.some(hit)) out.push('in an M box');
-    if (hit(C.TELLTALES)) out.push('over the warning lights');
+    if (!p.overTelltales && hit(C.TELLTALES)) out.push('over the warning lights');   // (overTelltales: the owner's pick, M340i's drive mode)
     const pts = round ? [[cx - r * 0.7, cy - r * 0.7], [cx + r * 0.7, cy - r * 0.7], [cx, cy - r]] : [[p.x, p.y], [p.x + p.w, p.y]];
     if (pts.some(([x, y]) => C.inCorner(x, y))) out.push('in a corner');
     return out;

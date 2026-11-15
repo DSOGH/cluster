@@ -30,7 +30,8 @@ const isNum = C.isNum;
 const KMH_PER_MPH = 1.609344;
 const RPM_MAX = 8000;
 const VEIL_GAIN = 2;          // the map's faded edges: the design's fade, half as wide (the map brighter)
-const OVER_MAP = 960;        // over Waze on cluster's map layer (its kWindowZ, 900) and the veil (950)
+const OVER_MAP = 960;
+const MODE_BASE = 671;       // the drive mode's baseline: its letters centred on the blue blocks (y 633 to 690)        // over Waze on cluster's map layer (its kWindowZ, 900) and the veil (950)
 
 const PAL = {
     bg: '#000000', text: '#f4f7fc', fg: '#ffffff', dim: '#a2abbb', faint: '#606e87', red: '#ff4457', regen: '#3ddc84', glow: '#3cd7ff',
@@ -209,10 +210,10 @@ function line(key, set, at, align, room, say, colour, o) {
  * from when the song changed: the car gives no position or length). The two text lines are drawn on the head unit
  * in the kit's fonts (any script) and sent as pictures when the song changes ('m340text', live).
  */
-/* the song: its artwork at the left, the title and the artist beside it (Titillium Web, baked for the head unit's canvas:
- * tw, twb), the time played below; in the centre panel, or along the bottom of the map's window over the map */
-const NP = { art: { x: 670, y: 430, s: 124 }, x: 812, w: 448, title: { y: 430, h: 56, size: 42, font: 'twb' }, sub: { y: 488, h: 40, size: 28, font: 'tw' }, timeBase: 558 };
-const NP_MAP = { art: { x: 664, y: 526, s: 76 }, x: 758, w: 500, title: { y: 526, h: 42, size: 30, font: 'twb' }, sub: { y: 566, h: 34, size: 22, font: 'tw' } };
+/* the song: its artwork at the left, the title and the artist beside it (in Pirulen, baked for the head unit's canvas:
+ * pir: the figures' face, Pirulen), the time played below; in the centre panel, or along the bottom of the map's window over the map */
+const NP = { art: { x: 676, y: 442, s: 96 }, x: 790, w: 470, title: { y: 446, h: 38, size: 26, font: 'pir' }, sub: { y: 486, h: 30, size: 17, font: 'pir' }, timeBase: 548 };
+const NP_MAP = { art: { x: 668, y: 540, s: 60 }, x: 740, w: 500, title: { y: 542, h: 30, size: 20, font: 'pir' }, sub: { y: 574, h: 24, size: 14, font: 'pir' } };
 let Canvas = null;
 /** A line of text as one byte a pixel (its coverage), w x h, centred (left: from the left), cut with "..." when too long. */
 function textPx(str, w, h, size, font, left) {
@@ -261,7 +262,7 @@ function drawArrow(cv, m, x, y, s) {
     if (m.kind === 'roundabout') {   // the ring, the way in from below, the exit's number in the ring
         cv.arc(cx, y + s * 0.42, s * 0.22, s * 0.34, 0, 360, c);
         cv.line(cx, base, cx, y + s * 0.76, W, c);
-        if (m.exit) cv.text(String(m.exit), cx, y + s * 0.42 + s * 0.12, Math.round(s * 0.32), c, { font: 'twb', align: 'center', literal: true });
+        if (m.exit) cv.text(String(m.exit), cx, y + s * 0.42 + s * 0.12, Math.round(s * 0.32), c, { font: 'pir', align: 'center', literal: true });
         return;
     }
     const a = turnAngle(m), mid = y + s * 0.5;
@@ -285,7 +286,7 @@ function dirPx(m, w, h) {
     if (!Canvas) Canvas = require('./kit/canvas').Canvas;
     const cv = new Canvas(w, h), s = h - 8, gap = 18;
     const dist = m.dist ? m.dist + ' ' + m.unit : '', road = m.road || (m.kind === 'destination' ? 'Destination' : '');
-    const big = 50, small = 26, fb = { font: 'twb', literal: true }, fl = { font: 'tw', literal: true };
+    const big = 40, small = 20, fb = { font: 'pir', literal: true }, fl = { font: 'pir', literal: true };
     const room = w - s - gap - 8;
     let r = road;
     if (r && cv.textWidth(r, small, fl) > room) { while (r.length > 1 && cv.textWidth(r + '...', small, fl) > room) r = r.slice(0, -1); r = r.replace(/\s+$/, '') + '...'; }
@@ -311,6 +312,27 @@ function directionsPiece(z) {
     };
     return { key: 'directions', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
         colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.nav, z, overMap: true, topMiddle: true };
+}
+/** The last 0-60 mph run (data.js d.zeroSixty), in the badge's place for a while after it: the time, and the best. */
+function zeroSixtyPiece(z) {
+    let last = null;
+    const draw = (d) => {
+        const r = d.zeroSixty;
+        if (!r) return null;
+        const key = r.s.toFixed(2) + '|' + (r.best || 0).toFixed(2);
+        if (!last || last.key !== key) {
+            if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+            const cv = new Canvas(DIR.w, DIR.h), f = { font: 'pir', literal: true, align: 'center' };
+            cv.text('0-60 MPH  ' + r.s.toFixed(2) + ' S', DIR.w / 2, 52, 36, '#ffffff', f);
+            cv.text(r.isBest ? 'NEW BEST' : 'BEST ' + r.best.toFixed(2) + ' S', DIR.w / 2, 88, 18, '#ffffff', f);
+            const px = Buffer.alloc(DIR.w * DIR.h);
+            for (let i = 0; i < px.length; i++) px[i] = cv.d[i * 4 + 3];
+            last = { key, px };
+        }
+        return last;
+    };
+    return { key: 'zeroSixty', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
+        colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.zeroSixty && !d.nav, z, overMap: true, topMiddle: true };
 }
 /** A now-playing text piece: say(media) its text, from the left of `at` (a card: NP or NP_MAP; at.z over the map). */
 function npText(key, row, say, colour, at) {
@@ -367,7 +389,7 @@ module.exports = {
     title: 'M340i Sport',
     font: 'wide',
     noFont: true,           // (its lettering is the design's own, on its glyph sheet: the engine's glyph atlas is not sent)
-    assets: 13,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+5: the song's two text lines and its artwork, the next turn, the badge)
+    assets: 14,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+5: the song's two text lines and its artwork, the next turn, the badge)
     startKB: 680,           // (about 640 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
     stripGear: true,
     stripFuel: false,
@@ -427,18 +449,21 @@ module.exports = {
                 ...line('rangeDigits', 'small', { x: rMax, base: M.at.range.base }, 'end', 110, rangeTxt, 'dim',
                     { shift: (d) => Math.min(rMax, Math.max(M.at.range.x, 406 + inkEnd('small', { x: 0 }, rangeTxt(d)))) - rMax }),
                 ...line('outsideDigits', 'small', M.at.temp, 'end', 180, (d) => { if (!isNum(d.outside)) return ''; const f = d.outside * 9 / 5 + 32; return (f < 0 ? '-' : '+') + Math.abs(f).toFixed(1); }, 'dim'),
-                // (the drive mode a little above the design's place, clear of the stock warning lights along the bottom middle, y 652 on)
-                ...line('driveName', 'mode', { x: M.at.mode.x, base: 648 }, 'middle', 440, modeName, modeColour, { max: 18 }));
+                // (the drive mode centred on the design's blue blocks at the bottom middle, as the owner asked: a stock
+                // warning light there, when one shows, comes over it)
+                ...line('driveName', 'mode', { x: M.at.mode.x, base: MODE_BASE }, 'middle', 440, modeName, modeColour, { max: 18, more: { overTelltales: true } }));
         }
         // the next turn while a route runs, at the top of the centre (Settings > Directions)
         if (!stock && o.directions !== 'off') list.push(directionsPiece(OVER_MAP + 30));
+        // the last 0-60 mph run, for a while after it (a route's turn comes first)
+        if (!stock) list.push(zeroSixtyPiece(OVER_MAP + 30));
         // the badge, top middle between the brackets' top lines (the G20's glass shows the top middle whole)
         if (o.badge !== 'off') {
             const b = require('./m340_badge');
             list.push({ key: 'badge', kind: 'm340text', x: 960 - Math.round(b.BADGE.w / 2), y: 70, w: b.BADGE.w, h: b.BADGE.h, textures: { u_text: b.tex() },
                 colors: (t) => ({ color: [t.fg, 1] }), z: OVER_MAP + 20, overMap: true, topMiddle: true,
                 // (a route's next turn stands in its place)
-                visible: (d) => !(o.directions !== 'off' && d.nav) });
+                visible: (d) => !(o.directions !== 'off' && d.nav) && !d.zeroSixty });
         }
         // the song playing, in the centre panel; over the map, one line along its bottom edge, where the map has
         // faded out (the top middle is under the cowl) (Settings > Now playing)

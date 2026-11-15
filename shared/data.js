@@ -32,7 +32,8 @@ const Media = require('./media');
 const Directions = require('./directions');
 const Artwork = require('./artwork');
 
-const READY_MS = 1000;   // the engine off and the car standing this long: READY (d.ready)
+const READY_MS = 1000;
+const ZS_KMH = 60 * 1.609344, ZS_MAX_MS = 25000, ZS_SHOW_MS = 12000;   // 0-60 mph (d.zeroSixty)   // the engine off and the car standing this long: READY (d.ready)
 
 const isNum = (v) => typeof v === 'number' && isFinite(v);
 const PROGRAMS = { S_MINUS_PROGRAMM: 'S', M_MINUS_PROGRAMM: 'M', 1: 'S', 2: 'M' };
@@ -453,6 +454,10 @@ function startData(ctx, opts) {
      * from the car's speed and acceleration, many times a second. Settings > kW: Fast (the default) or Readings only. */
     let lastKwAt = null;
     let readySince = 0;   // (the engine off with the car standing since then: d.ready)
+    // 0-60 mph (d.zeroSixty): from leaving a standstill to 60 mph, the best kept in dataDir/zero_sixty.json
+    const zsFile = ctx.dataDir ? require('path').join(ctx.dataDir, 'zero_sixty.json') : null;
+    const zs = { armed: false, t0: 0, last: null, at: 0, best: null };
+    try { zs.best = JSON.parse(require('fs').readFileSync(zsFile, 'utf8')).best || null; } catch (e) { zs.best = null; }
     const fastKw = () => setting('kwFast') !== 'off';
     let shownFor = 0;
     const vehicleTimer = setInterval(() => {
@@ -513,6 +518,21 @@ function startData(ctx, opts) {
             const offStanding = o.engineOn === false && !(isNum(o.speed) && o.speed >= 3);
             if (!offStanding) readySince = 0; else if (!readySince) readySince = tNow;
             o.ready = offStanding && tNow - readySince >= READY_MS;
+            // 0-60 mph: timed from the first reading off a standstill to the first at 60 mph or more; a run longer than
+            // ZS_MAX_MS, or one that stops first, doesn't count; the time shown ZS_SHOW_MS after
+            if (isNum(o.speed) && !d.demo) {
+                if (o.speed < 0.5) { zs.armed = true; zs.t0 = 0; }
+                else if (zs.armed && !zs.t0) zs.t0 = tNow;
+                if (zs.t0 && o.speed >= ZS_KMH) {
+                    const sec = (tNow - zs.t0) / 1000;
+                    zs.armed = false; zs.t0 = 0; zs.last = sec; zs.at = tNow;
+                    const best = !zs.best || sec < zs.best;
+                    if (best) { zs.best = sec; try { if (zsFile) require('fs').writeFileSync(zsFile, JSON.stringify({ best: sec })); } catch (e) { /* kept for this run */ } }
+                    log.info('0-60 mph: ' + sec.toFixed(2) + ' s' + (best ? ' (best)' : ', best ' + zs.best.toFixed(2) + ' s'));
+                }
+                if (zs.t0 && tNow - zs.t0 > ZS_MAX_MS) { zs.armed = false; zs.t0 = 0; }
+            }
+            o.zeroSixty = zs.last && tNow - zs.at < ZS_SHOW_MS ? { s: zs.last, best: zs.best, isBest: zs.best === zs.last } : null;
             // the song playing (media.js): { title, artist, album, elapsed } or null
             o.media = d.demo ? DEMO_SONG(tNow) : media ? media.now() : null;
             if (o.media && artwork && !d.demo) o.media.art = artwork.now();

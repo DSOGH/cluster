@@ -4,7 +4,8 @@ bake_canvas_font.py - a glyph atlas for the head unit's canvas (kit/runtime/font
 fonts.js reads them), from a font file: the M340i layout's song and directions, drawn on the head unit, in the
 face of its figures (Titillium Web, SIL Open Font License, tools/m340/fonts/OFL.txt).
 
-    python3 tools/bake_canvas_font.py           (tw: Titillium Web Regular, twb: Bold)
+    python3 tools/bake_canvas_font.py [Pirulen.ttf]   (tw: Titillium Web Regular, twb: Bold; pir: Pirulen Bold, the
+                                                     figures' face, from the owner's file, not kept here)
 
 Each size: the glyphs packed in rows on one atlas (one byte a pixel, zlib, base64); a glyph is
 [x, y, w, h, left, top (from the baseline, up negative), advance], as the kit's own families.
@@ -62,9 +63,12 @@ def bake(path, size):
             'alpha': base64.b64encode(zlib.compress(atlas.tobytes(), 9)).decode(), 'glyphs': glyphs}
 
 
+import sys
+if len(sys.argv) > 1:
+    FAMILIES = {'pir': sys.argv[1]}
 for fam, fn in FAMILIES.items():
-    path = os.path.join(HERE, 'm340', 'fonts', fn)
-    j = {'family': fam, 'source': fn + ' (SIL Open Font License 1.1)', 'sizes': [bake(path, s) for s in SIZES]}
+    path = fn if os.path.isabs(fn) else os.path.join(HERE, 'm340', 'fonts', fn)
+    j = {'family': fam, 'source': os.path.basename(fn) + ('' if fam == 'pir' else ' (SIL Open Font License 1.1)'), 'sizes': [bake(path, s) for s in SIZES]}
     out = os.path.join(OUT, fam + '.json')
     json.dump(j, open(out, 'w'), separators=(',', ':'))
     print(fam, os.path.getsize(out))
