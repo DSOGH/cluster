@@ -186,11 +186,10 @@ EXTRAS = r'''
 '''
 
 
-# the figures and letters the layout writes (speed, gear, time, range, temperature, drive mode) in a face close to
-# BMW's own cluster figures (a 4 open at the top): Titillium Web Bold (SIL Open Font License, tools/m340/fonts),
-# set at the design font's cap height, so each set keeps the design's size. M340_FIGURES_FONT=none keeps the
-# design's own glyphs.
-FIGURES_FONT = os.environ.get('M340_FIGURES_FONT', os.path.join(HERE, 'm340', 'fonts', 'TitilliumWeb-Bold.ttf'))
+# the figures and letters the layout writes (speed, gear, time, range, temperature, drive mode): the design's own
+# glyphs (Pirulen, the owner's pick); M340_FIGURES_FONT=<a .ttf> sets them in another face at the design font's cap
+# height (tools/m340/fonts/TitilliumWeb-Bold.ttf was tried, Nov 2026, and the owner kept Pirulen).
+FIGURES_FONT = os.environ.get('M340_FIGURES_FONT', 'none')
 # each set's size against the design's (the owner's ask: the speed and the gear larger, as a BMW cluster's)
 FIGURES_GROW = {'sp': 1.3, 'gr': 1.3, 'sm': 1.0, 'md': 1.08}
 FIGURES = '0123456789:.+-' + ''.join(sorted(set('PRNDSM' + ''.join(MODES)) - {' '}))

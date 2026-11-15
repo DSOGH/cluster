@@ -193,13 +193,15 @@ function line(key, set, at, align, room, say, colour, o) {
         out.slice(0, slots).forEach(([g, p], i) => { u[i * 4] = g.x; u[i * 4 + 1] = g.y; u[i * 4 + 2] = g.w; u[i * 4 + 3] = Math.round(start + p - (g.fx || 0)) + g.ox - x; });
         return u;
     };
-    return [Object.assign({
-        key, kind: slots > 6 ? 'm340words' : 'm340glyphs', x, y, w: room, h: G.h, textures: { u_sheet: ART.tex('glyphs') },
-        params: { u_g: new Array(slots * 4).fill(0) },
+    // a longer line in layers of six glyphs, each the line's six from k * 6: the one shader of eighteen (m340words)
+    // showed dashes for the drive mode on a car (Nov 2026), likely 18 vec4s past what the cluster's GPU takes
+    return [0, 1, 2].slice(0, slots / 6).map((k) => Object.assign({
+        key: k ? key + '_' + k : key, kind: 'm340glyphs', x, y, w: room, h: G.h, textures: { u_sheet: ART.tex('glyphs') },
+        params: { u_g: new Array(24).fill(0) },
         colors: (t, d) => ({ color: [typeof colour === 'function' ? colour(t, d) : t[colour], 1] }),
-        dyn: (d) => ({ u_g: place(d) }),
-        says: say,
-    }, o.more)];
+        dyn: (d) => ({ u_g: place(d).slice(k * 24, k * 24 + 24) }),
+        says: k ? undefined : say,
+    }, o.more));
 }
 /**
  * Now playing: the song the car's media player shows (data.js d.media, from the head unit's media state), in the
