@@ -210,10 +210,11 @@ function line(key, set, at, align, room, say, colour, o) {
  * from when the song changed: the car gives no position or length). The two text lines are drawn on the head unit
  * in the kit's fonts (any script) and sent as pictures when the song changes ('m340text', live).
  */
-/* the song: its artwork at the left, the title and the artist beside it (in Pirulen, baked for the head unit's canvas:
- * pir: the figures' face, Pirulen), the time played below; in the centre panel, or along the bottom of the map's window over the map */
-const NP = { art: { x: 676, y: 442, s: 96 }, x: 790, w: 470, title: { y: 446, h: 38, size: 26, font: 'pir' }, sub: { y: 486, h: 30, size: 17, font: 'pir' }, timeBase: 548 };
-const NP_MAP = { art: { x: 668, y: 540, s: 60 }, x: 740, w: 500, title: { y: 542, h: 30, size: 20, font: 'pir' }, sub: { y: 574, h: 24, size: 14, font: 'pir' } };
+/* the song: its artwork, the title and the artist beside it (Pirulen, baked for the head unit's canvas: pir), as
+ * one picture drawn on the head unit at each change of song, centred on the display; the time played below. In the
+ * centre panel, or along the bottom of the map's window over the map. */
+const NP = { x: 560, y: 430, w: 800, h: 104, art: 96, title: 26, sub: 17, timeBase: 556 };
+const NP_MAP = { x: 610, y: 536, w: 700, h: 64, art: 60, title: 20, sub: 14 };
 let Canvas = null;
 /** A line of text as one byte a pixel (its coverage), w x h, centred (left: from the left), cut with "..." when too long. */
 function textPx(str, w, h, size, font, left) {
@@ -334,47 +335,160 @@ function zeroSixtyPiece(z) {
     return { key: 'zeroSixty', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
         colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.zeroSixty && !d.nav, z, overMap: true, topMiddle: true };
 }
-/** A now-playing text piece: say(media) its text, from the left of `at` (a card: NP or NP_MAP; at.z over the map). */
-function npText(key, row, say, colour, at) {
-    const X = at.x, Wd = at.w;
-    let last = null;
-    const draw = (d) => {
-        const str = d.media ? say(d.media) : '';
-        if (!str) return null;
-        if (!last || last.key !== str) last = { key: str, px: textPx(str, Wd, row.h, row.size, row.font, true) };
-        return last;
-    };
-    return { key, kind: 'm340text', x: X, y: row.y, w: Wd, h: row.h, live: { name: 'u_text', w: Wd, h: row.h, draw },
-        colors: (t) => ({ color: [t[colour], 1] }), visible: (d) => !!(d.media && say(d.media)), z: at && at.z, overMap: !!(at && at.z) };
-}
-/** The artwork's placeholder (no artwork found): a dark tile with a note. */
+/** The artwork's placeholder (no artwork found): a dark tile with a note, S x S RGBA. */
 let notePx = null;
-function placeholderPx(s) {
+function placeholderPx(S) {
     if (notePx) return notePx;
     if (!Canvas) Canvas = require('./kit/canvas').Canvas;
-    const cv = new Canvas(s, s).clear('#1b2433'), c = '#7d8aa3';
-    cv.circle(s * 0.38, s * 0.66, s * 0.1, c); cv.circle(s * 0.66, s * 0.6, s * 0.1, c);
-    cv.line(s * 0.47, s * 0.66, s * 0.47, s * 0.3, s * 0.05, c); cv.line(s * 0.75, s * 0.6, s * 0.75, s * 0.24, s * 0.05, c);
-    cv.line(s * 0.47, s * 0.3, s * 0.75, s * 0.24, s * 0.07, c);
-    notePx = { key: 'note', px: Buffer.from(cv.d) };
+    const cv = new Canvas(S, S).clear('#1b2433'), c = '#7d8aa3';
+    cv.circle(S * 0.38, S * 0.66, S * 0.1, c); cv.circle(S * 0.66, S * 0.6, S * 0.1, c);
+    cv.line(S * 0.47, S * 0.66, S * 0.47, S * 0.3, S * 0.05, c); cv.line(S * 0.75, S * 0.6, S * 0.75, S * 0.24, S * 0.05, c);
+    cv.line(S * 0.47, S * 0.3, S * 0.75, S * 0.24, S * 0.07, c);
+    notePx = Buffer.from(cv.d);
     return notePx;
 }
-/** The song's artwork (data.js d.media.art: 128 x 128 RGBA, artwork.js), its corners rounded; the placeholder without. */
-function npArt(at) {
-    const S = 128, a = at.art;
-    const draw = (d) => (d.media ? (d.media.art || placeholderPx(S)) : null);
-    return { key: 'npArt', kind: 'm340img', x: a.x, y: a.y, w: a.s, h: a.s, live: { name: 'u_img', w: S, h: S, format: 'rgba8', draw },
-        params: { u_round: [Math.round(a.s * 0.1)] }, visible: (d) => !!d.media, z: at.z, overMap: !!at.z };
+/** The song card as RGBA w x h: the artwork (128 x 128 RGBA, scaled to c.art, corners rounded) and the two lines beside
+ * it, the whole centred across. */
+function cardPx(m, c) {
+    if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+    const cv = new Canvas(c.w, c.h), f = { font: 'pir', literal: true }, gap = Math.round(c.art * 0.18);
+    const title = m.title || m.artist || '', sub = m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album || '';
+    const room = c.w - c.art - gap - 4;
+    const fit = (str, size) => { let x = String(str); if (cv.textWidth(x, size, f) <= room) return x; while (x.length > 1 && cv.textWidth(x + '...', size, f) > room) x = x.slice(0, -1); return x.replace(/\s+$/, '') + '...'; };
+    const t = fit(title, c.title), u = sub ? fit(sub, c.sub) : '';
+    const tw = Math.max(cv.textWidth(t, c.title, f), u ? cv.textWidth(u, c.sub, f) : 0);
+    const x0 = Math.round((c.w - (c.art + gap + tw)) / 2), ay = Math.round((c.h - c.art) / 2);
+    // the artwork, scaled from 128 (box filter) into place, corners rounded
+    const src = (m.art && m.art.px) || placeholderPx(128), k = 128 / c.art, rad = c.art * 0.12;
+    for (let y = 0; y < c.art; y++) for (let x = 0; x < c.art; x++) {
+        const dx = Math.max(0, Math.abs(x + 0.5 - c.art / 2) - (c.art / 2 - rad)), dy = Math.max(0, Math.abs(y + 0.5 - c.art / 2) - (c.art / 2 - rad));
+        const cover = Math.max(0, Math.min(1, rad + 0.5 - Math.hypot(dx, dy)));
+        if (!cover) continue;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let sy = Math.floor(y * k); sy < Math.floor((y + 1) * k); sy++) for (let sx = Math.floor(x * k); sx < Math.floor((x + 1) * k); sx++) {
+            const i = (sy * 128 + sx) * 4; r += src[i]; g += src[i + 1]; b += src[i + 2]; n++;
+        }
+        const o = ((ay + y) * c.w + x0 + x) * 4;
+        cv.d[o] = r / n; cv.d[o + 1] = g / n; cv.d[o + 2] = b / n; cv.d[o + 3] = Math.round(255 * cover);
+    }
+    const tx = x0 + c.art + gap;
+    if (u) {
+        cv.text(t, tx, Math.round(c.h * 0.46), c.title, '#ffffff', f);
+        cv.text(u, tx, Math.round(c.h * 0.8), c.sub, '#a2abbb', f);
+    } else cv.text(t, tx, Math.round(c.h / 2 + c.title * 0.36), c.title, '#ffffff', f);
+    return Buffer.from(cv.d);
 }
+/** The song: the card (one RGBA picture, drawn again when the song or its artwork changes), and in the centre panel
+ * the time played below it. Hidden while a warning shows (it stands in the same place). at.z: over the map. */
 function nowPlaying(at) {
-    const time = (d) => { if (!d.media) return ''; const e = Math.floor(d.media.elapsed); return Math.floor(e / 60) + ':' + String(e % 60).padStart(2, '0'); };
+    let last = null;
+    const draw = (d) => {
+        const m = d.media;
+        if (!m) return null;
+        const key = [m.title, m.artist, m.album, m.art ? m.art.key : ''].join('|');
+        if (!last || last.key !== key) last = { key, px: cardPx(m, at) };
+        return last;
+    };
+    const show = (d) => !!d.media && !(d.warnings && d.warnings.length);
+    const time = (d) => { if (!show(d)) return ''; const e = Math.floor(d.media.elapsed); return Math.floor(e / 60) + ':' + String(e % 60).padStart(2, '0'); };
     return [
-        npArt(at),
-        npText('npTitle', at.title, (m) => m.title || m.artist, 'fg', at),
-        npText('npSub', at.sub, (m) => (m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album), 'dim', at),
-        ...(at.timeBase ? line('npTime', 'small', { x: at.x + 2, base: at.timeBase }, 'start', 140, time, 'dim', { more: { visible: (d) => !!d.media } }) : []),
+        { key: 'npCard', kind: 'm340img', x: at.x, y: at.y, w: at.w, h: at.h, live: { name: 'u_img', w: at.w, h: at.h, format: 'rgba8', draw },
+            params: { u_round: [0] }, visible: show, z: at.z, overMap: !!at.z },
+        ...(at.timeBase ? line('npTime', 'small', { x: 960, base: at.timeBase }, 'middle', 140, time, 'dim', { more: { visible: show } }) : []),
     ];
 }
+
+/*
+ * The car's warnings (data.js d.warnings: Check Control's active messages, [{ name, red }]): a banner at the bottom
+ * middle, red for a red message, amber else, over everything (the map too); the first message, and how many more.
+ */
+const WARN = { x: 560, y: 566, w: 800, h: 60 };
+function warningPiece() {
+    let last = null;
+    const draw = (d) => {
+        const ws = d.warnings || [];
+        if (!ws.length) return null;
+        const w0 = ws[0], key = ws.map((w) => w.name + (w.red ? '!' : '')).join('|');
+        if (last && last.key === key) return last;
+        if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+        const cv = new Canvas(WARN.w, WARN.h), f = { font: 'pir', literal: true }, col = w0.red ? '#ff3b4a' : '#ffb020';
+        const text = String(w0.name).toUpperCase() + (ws.length > 1 ? '   +' + (ws.length - 1) : '');
+        const size = 20, tw = Math.min(WARN.w - 120, cv.textWidth(text, size, f)), bw = tw + 96, bx = Math.round((WARN.w - bw) / 2);
+        cv.roundRect(bx, 4, bw, WARN.h - 8, 12, [12, 14, 20, 235]);
+        cv.roundRect(bx, 4, bw, WARN.h - 8, 12, [0, 0, 0, 0]);
+        cv.fillRect(bx + 12, 12, 4, WARN.h - 24, col);
+        // a warning triangle with its "!"
+        const cx = bx + 46, cy = WARN.h / 2;
+        cv.triangle([[cx, cy - 15], [cx - 17, cy + 13], [cx + 17, cy + 13]], col);
+        cv.fillRect(cx - 2, cy - 6, 4, 11, '#0c0e14'); cv.fillRect(cx - 2, cy + 7, 4, 3, '#0c0e14');
+        cv.text(text, bx + 76, Math.round(WARN.h / 2 + size * 0.36), size, '#ffffff', f);
+        last = { key, px: Buffer.from(cv.d) };
+        return last;
+    };
+    return { key: 'warning', kind: 'm340img', x: WARN.x, y: WARN.y, w: WARN.w, h: WARN.h, live: { name: 'u_img', w: WARN.w, h: WARN.h, format: 'rgba8', draw },
+        params: { u_round: [0] }, visible: (d) => !!(d.warnings && d.warnings.length), z: OVER_MAP + 35, overMap: true };
+}
+
+/* the gear lever's place, bottom right (P R N D S M, the one selected lit; M in manual) */
+const SEL = { x: 1664, base: 646, letters: 'PRNDSM' };   // (above the outside temperature)
+function selectorPieces() {
+    const G = M.glyphs.mode, str = SEL.letters.split('').join(' ');
+    const sel = (d) => { const g = C.gearText(d); return /^M/.test(g) ? 'M' : /^[PRNDS]/.test(g) ? g[0] : ''; };
+    // where each letter's ink starts, from the first's (the lit letter set alone, moved there)
+    const offs = {}; let pen = 0, first = null;
+    for (const ch of str) { const g = G.g[ch]; if (!g) { pen += G.space || 0; continue; } if (first === null) first = pen + g.inkL; offs[ch] = pen + g.inkL - first; pen += g.adv; }
+    return [
+        ...line('selAll', 'mode', SEL, 'start', 240, () => str, 'faint'),
+        ...line('selLit', 'mode', SEL, 'start', 240, sel, 'fg', { shift: (d) => offs[sel(d)] || 0 }),
+    ];
+}
+
+/*
+ * The side gauges (Settings > Side gauges): an upright bar in each outer gap, beside the scales, its reading above
+ * it and its unit below. boost: the turbo's pressure over the air's (psi); hp, torque: the engine's (FES torque, hp
+ * from it and the revs), at the crank or the wheels (Settings > Power at: the crank's less the drivetrain's loss).
+ */
+const SIDE_G = { left: { x: 30, cx: 46 }, right: { x: 1858, cx: 1874 }, y: 304, w: 32, h: 268 };   // (below the top corners and the eDrive box)
+const SIDE_KINDS = {
+    boost: { max: 25, ticks: 5, unit: 'PSI', of: (d) => (isNum(d.boostActual) ? Math.max(0, d.boostActual * 14.5038) : null), fmt: (v) => v.toFixed(1), c: ['#0a3d8f', '#3cd7ff'] },
+    hp: { max: 500, ticks: 5, unit: 'HP', of: null, fmt: (v) => String(Math.round(v)), c: ['#7a0d1a', '#ff4457'] },
+    torque: { max: 500, ticks: 5, unit: 'LB-FT', of: null, fmt: (v) => String(Math.round(v)), c: ['#5a2a00', '#ffb020'] },
+};
+/** A side gauge's reading: its value (in its unit), as text, and its unit. */
+function sideOf(kind, o) {
+    const K = SIDE_KINDS[kind], wheel = o.powerAt === 'wheel', keep = 1 - (Number(o.drivetrainLoss) || 15) / 100;
+    const crank = (d) => (isNum(d.torque) && d.torque > 0 ? d.torque : 0);
+    const of = K.of || (kind === 'hp'
+        ? (d) => (isNum(d.rpm) && isNum(d.torque) ? crank(d) * d.rpm / 7121 * (wheel ? keep : 1) : null)
+        : (d) => (isNum(d.torque) ? crank(d) * 0.737562 * (wheel ? keep : 1) : null));
+    return { of, unit: wheel && kind === 'hp' ? 'WHP' : wheel && kind === 'torque' ? 'WTQ' : K.unit };
+}
+function sideReading(kind, o, d) {
+    const r = sideOf(kind, o), v = r.of(d);
+    return { value: v, text: v === null ? '--' : SIDE_KINDS[kind].fmt(v), unit: r.unit };
+}
+function sideGauge(side, kind, o) {
+    const K = SIDE_KINDS[kind], at = SIDE_G[side], { of, unit } = sideOf(kind, o);
+    let lbl = null;
+    const label = () => {
+        if (lbl) return lbl;
+        if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+        const cv = new Canvas(96, 28);
+        cv.text(unit, 48, 20, 15, '#ffffff', { font: 'pir', literal: true, align: 'center' });
+        const px = Buffer.alloc(96 * 28);
+        for (let i = 0; i < px.length; i++) px[i] = cv.d[i * 4 + 3];
+        return (lbl = { key: unit, px });
+    };
+    return [
+        { key: 'side_' + side, kind: 'm340vbar', x: at.x, y: SIDE_G.y, w: SIDE_G.w, h: SIDE_G.h,
+            params: { u_ticks: [K.ticks], u_track: hexRGB('#151c2a') }, colors: () => ({ c0: K.c[0], c1: K.c[1] }),
+            value: (d) => clamp01((of(d) || 0) / K.max), max: 1, glide: true },
+        ...line('sideVal_' + side, 'small', { x: at.cx, base: SIDE_G.y - 12 }, 'middle', 110, (d) => { const v = of(d); return v === null ? '' : K.fmt(v); }, 'fg'),
+        { key: 'sideUnit_' + side, kind: 'm340text', x: at.cx - 48, y: SIDE_G.y + SIDE_G.h + 8, w: 96, h: 28, live: { name: 'u_text', w: 96, h: 28, draw: label },
+            colors: (t) => ({ color: [t.dim, 1] }) },
+    ];
+}
+const hexRGB = (h) => [1, 3, 5].map((i) => Math.round(parseInt(h.slice(i, i + 2), 16) / 255 * 1000) / 1000);
 
 /** Where a line's ink ends on the cluster (the am / pm follows the time). */
 function inkEnd(set, at, str) {
@@ -389,7 +503,7 @@ module.exports = {
     title: 'M340i Sport',
     font: 'wide',
     noFont: true,           // (its lettering is the design's own, on its glyph sheet: the engine's glyph atlas is not sent)
-    assets: 14,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+5: the song's two text lines and its artwork, the next turn, the badge)
+    assets: 12,              // (what it sends instead: two tile maps, two atlases, two palettes, the channel edges, the glyph sheet)  (+4: the song's card, the next turn, the 0-60 time, the warning; with the side gauges +1 each)
     startKB: 680,           // (about 640 KB once, most of it the picture; a plain 1920x720 picture would be 5400)
     stripGear: true,
     stripFuel: false,
@@ -397,6 +511,7 @@ module.exports = {
     mapWindow: WINDOW,
     speedGauge: true,
     _speedFrac: speedFrac,
+    sideReading, SIDE_KINDS,
     gearShort: true,        // (D or S alone, the number alone in manual: tools/test_engine.js)
     palette: pal,
     gearText: gearShort,
@@ -457,19 +572,18 @@ module.exports = {
         if (!stock && o.directions !== 'off') list.push(directionsPiece(OVER_MAP + 30));
         // the last 0-60 mph run, for a while after it (a route's turn comes first)
         if (!stock) list.push(zeroSixtyPiece(OVER_MAP + 30));
-        // the badge, top middle between the brackets' top lines (the G20's glass shows the top middle whole)
-        if (o.badge !== 'off') {
-            const b = require('./m340_badge');
-            list.push({ key: 'badge', kind: 'm340text', x: 960 - Math.round(b.BADGE.w / 2), y: 70, w: b.BADGE.w, h: b.BADGE.h, textures: { u_text: b.tex() },
-                colors: (t) => ({ color: [t.fg, 1] }), z: OVER_MAP + 20, overMap: true, topMiddle: true,
-                // (a route's next turn stands in its place)
-                visible: (d) => !(o.directions !== 'off' && d.nav) && !d.zeroSixty });
-        }
         // the song playing, in the centre panel; over the map, one line along its bottom edge, where the map has
         // faded out (the top middle is under the cowl) (Settings > Now playing)
         if (!stock && o.nowPlaying !== 'off') {
             list.push(...nowPlaying(map ? Object.assign({ z: OVER_MAP + 30 }, NP_MAP) : NP));
         }
+        // the car's warnings, over everything at the bottom middle
+        if (!stock) list.push(warningPiece());
+        // the gear lever's place, bottom right (with the layout's own bottom row)
+        if (!strip) list.push(...selectorPieces());
+        // the side gauges (Settings > Side gauges)
+        if (o.sideLeft && o.sideLeft !== 'off' && SIDE_KINDS[o.sideLeft]) list.push(...sideGauge('left', o.sideLeft, o));
+        if (o.sideRight && o.sideRight !== 'off' && SIDE_KINDS[o.sideRight]) list.push(...sideGauge('right', o.sideRight, o));
         if (stock) return list.filter((p) => p.kind === 'flat' || p.x + p.w <= 566 || p.x >= 1104);
         return list;
     },

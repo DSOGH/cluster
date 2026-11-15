@@ -57,7 +57,7 @@ mgu.run({
         const showing = () => settings.get('show') === 'on';
         // every reading (data.js, shared with Cluster Centre): the car's signals, the engine unit over UDS for
         // what a layout needs (layout.needs), eDrive Live's charge and power while shown
-        const D = startData(ctx, { shown: showing, tyres: true, media: true, directions: true });
+        const D = startData(ctx, { shown: showing, tyres: true, media: true, directions: true, warnings: true });
         const car = D.car;
         // the driving assistant (dap.js), for the layouts that show it (layout.dap: Modern wide's road, Sport's
         // cruise control): subscribed once one is first shown
@@ -69,9 +69,22 @@ mgu.run({
             d.dap = d.demo ? DAP_DEMO : dap ? dap.state() : null;
             return d;
         };
+        /* the Waze centre only while Waze on cluster shows its map (its /run/waze-on-cluster/status.json, written each
+         * second: state 'showing'); otherwise the layout's own centre (the M colours), never the stock cluster's map
+         * screen behind an empty window. A change counts once held WAZE_ON_MS (on) or WAZE_OFF_MS (off). */
+        const WOC_STATUS = '/run/waze-on-cluster/status.json', WAZE_ON_MS = 3000, WAZE_OFF_MS = 8000;
+        const waze = { on: false, cand: false, since: 0 };
+        const wazeShowing = () => {
+            try {
+                if (Date.now() - require('fs').statSync(WOC_STATUS).mtimeMs > 5000) return false;
+                return JSON.parse(require('fs').readFileSync(WOC_STATUS, 'utf8')).state === 'showing';
+            } catch (e) { return false; }
+        };
+        const wantMap = () => settings.get('centre') === 'map' || settings.get('centre') === 'pages';
         const options = () => ({
             speedUnit: settings.get('speedUnit'), tempUnit: settings.get('tempUnit'), torqueUnit: settings.get('torqueUnit'),
-            centre: settings.get('centre') === 'pages' ? 'map' : settings.get('centre'),   // (a saved 'pages', retired: Waze)
+            // (a saved 'pages', retired: Waze; Waze only while its map shows, else the layout's own centre)
+            centre: wantMap() ? (waze.on || car.data().demo ? 'map' : 'info') : settings.get('centre'),
             redline: Number(settings.get('redline')) || 7000, rpmMax: Number(settings.get('rpmMax')) || 8000,
             boxClear: settings.get('boxClear') === 'on',
             cluster: settings.get('cluster') === 'm' ? 'm' : 'standard',
@@ -79,6 +92,9 @@ mgu.run({
             boxBezel: settings.get('boxBezel') === 'on',   // (off: the box sits on the plain background)
             nowPlaying: settings.get('nowPlaying') === 'off' ? 'off' : 'on',   // (M340i Sport: the song in the centre panel)
             directions: settings.get('directions') === 'off' ? 'off' : 'on',   // (M340i Sport: the next turn at the top of the centre)
+            // (M340i Sport: the side gauges, and where their power and torque are taken)
+            sideLeft: settings.get('sideLeft') || 'off', sideRight: settings.get('sideRight') || 'off',
+            powerAt: settings.get('powerAt') === 'wheel' ? 'wheel' : 'crank', drivetrainLoss: Number(settings.get('drivetrainLoss')) || 15,
             vehicle: D.vehicle().vehicle,      // set, or found from the car (Auto)
         });
         /** Live: demo data on, or the car's signals answer (a parked car sends nothing new for minutes, so a
@@ -123,7 +139,15 @@ mgu.run({
             if (cluster.status().shown) presence.mark('layouts', { centre: options().centre });
             // the Waze centre: Waze on cluster draws its map over the layout, filling the window (map_window.js): the
             // layout's own (M's and Sport's: where bimmer-lab's put it), else the native map area
-            mapWindow.set(cluster.status().shown && options().centre === 'map' ? (layout.mapWindow || require('./layout_common').MAP) : null);
+            // (held while the Waze centre is set, its map showing or not: m340-waze-window keeps Waze on cluster there)
+            mapWindow.set(cluster.status().shown && wantMap() ? (layout.mapWindow || require('./layout_common').MAP) : null);
+            // Waze's map showing or not: the layout's centre follows (held, then rebuilt)
+            const ws = wantMap() && wazeShowing(), tNow = Date.now();
+            if (ws !== waze.cand) { waze.cand = ws; waze.since = tNow; }
+            if (waze.cand !== waze.on && tNow - waze.since >= (waze.cand ? WAZE_ON_MS : WAZE_OFF_MS)) {
+                waze.on = waze.cand; log.info('Waze on cluster ' + (waze.on ? 'shows its map: the Waze centre' : 'shows no map: the layout\'s own centre'));
+                cluster.rebuild();
+            }
             // the vehicle found (Settings > Vehicle: Auto): the layout redrawn for it once known
             const v = D.vehicle().vehicle;
             if (v !== lastVehicle) { if (lastVehicle) cluster.rebuild(); lastVehicle = v; }
@@ -138,7 +162,7 @@ mgu.run({
         settings.onChange((k) => {
             if (k === 'look' || k === 'background') return cluster.recolour();
             if (k === 'layout') layout = byId(settings.get('layout'));
-            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions'].indexOf(k) >= 0) cluster.rebuild();
+            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'sideLeft', 'sideRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
         });
 
         /* ---------- the car's range and charge signals, from its own catalog ---------- */
@@ -151,8 +175,32 @@ mgu.run({
         let page = 0;   // 0: status; 1...: the signal list, SIGNALS_PER_PAGE a page
         // 0: status; 1: the raw drive-mode and range values; 2: what the cluster has up; 3...: the signal list
         // (status, the drive mode and ranges, the cluster's report, the song playing, then the signal list)
-        const pages = () => 4 + Math.ceil(found.list.length / SIGNALS_PER_PAGE);
+        const pages = () => 5 + Math.ceil(found.list.length / SIGNALS_PER_PAGE);   // (4: the side gauges' preview)
 
+        /* the side gauges' preview (Signals, page 5): each side's gauge as the cluster draws it, with the car's reading
+         * now (or a sample while parked), the warnings and the 0-60 best below */
+        function widgetsPage(cv, t) {
+            const d = data(), o = options(), L = require('./layout_m340');
+            cv.text('Side gauges   ·   Settings > Side gauge, left / right', 48, 70, 26, t.text, { font: 'bold', literal: true });
+            const sample = !(isNum(d.rpm) && d.rpm > 300);
+            const dd = sample ? Object.assign({}, d, { rpm: 4800, torque: 480, boostActual: 1.05 }) : d;
+            ['left', 'right'].forEach((side, i) => {
+                const kind = o['side' + (side === 'left' ? 'Left' : 'Right')], x = 120 + i * 560;
+                cv.text(side === 'left' ? 'Left' : 'Right', x, 130, 22, t.dim, { font: 'bold', literal: true });
+                if (!kind || kind === 'off') { cv.text('Off', x, 170, 30, t.dim, { font: 'bold', literal: true }); return; }
+                const r = L.sideReading(kind, o, dd), K = L.SIDE_KINDS[kind];
+                const f = Math.max(0, Math.min(1, (r.value || 0) / K.max)), bx = x, by = 150, bw = 44, bh = 300;
+                cv.roundRect(bx, by, bw, bh, bw / 2, '#151c2a');
+                if (f > 0) cv.roundRect(bx, by + bh * (1 - f), bw, bh * f, bw / 2, K.c[1]);
+                cv.fillRect(bx, by + bh * (1 - f), bw, 3, '#ffffff');
+                cv.text(r.text, bx + 80, by + 120, 64, t.text, { font: 'bold', literal: true });
+                cv.text(r.unit + (sample ? '   (a sample: the engine is off)' : ''), bx + 84, by + 160, 22, t.dim, { font: 'bold', literal: true });
+                cv.text({ boost: 'Boost over the air outside', hp: 'Horsepower from torque and revs', torque: 'Torque, the engine\'s reading' }[kind]
+                    + (kind !== 'boost' ? (o.powerAt === 'wheel' ? ', at the wheels (less ' + o.drivetrainLoss + ' %)' : ', at the crank') : ''), bx + 84, by + 196, 18, t.dim, { font: 'label', literal: true });
+            });
+            cv.text('Warnings: ' + (D.status().warnings || '-'), 48, 490, 16, t.dim, { font: 'label', literal: true });
+            return cv;
+        }
         ui.onClick('BTN_SHOW', () => { settings.set('show', showing() ? 'off' : 'on'); return render(); });
         ui.onClick('BTN_SIGNALS', () => { logView = null; page = (page + 1) % Math.max(1, pages()); return render(); });
 
@@ -279,9 +327,10 @@ mgu.run({
                 cv.text('Artwork: ' + String(D.status().artwork || '-').slice(0, 150), 48, y + 80, 16, t.dim, { font: 'label', literal: true });
                 return ui.image('MAIN_GFX', cv);
             }
-            if (page > 3) {
-                cv.text('Signals on this car for ranges, fuel and charge (' + found.list.length + ')   ·   page ' + (page - 3) + ' of ' + (pages() - 4), 48, 70, 26, t.text, { font: 'bold', literal: true });
-                found.list.slice((page - 4) * SIGNALS_PER_PAGE, (page - 3) * SIGNALS_PER_PAGE).forEach((s, i) => {
+            if (page === 4) return ui.image('MAIN_GFX', widgetsPage(cv, t));
+            if (page > 4) {
+                cv.text('Signals on this car for ranges, fuel and charge (' + found.list.length + ')   ·   page ' + (page - 4) + ' of ' + (pages() - 5), 48, 70, 26, t.text, { font: 'bold', literal: true });
+                found.list.slice((page - 5) * SIGNALS_PER_PAGE, (page - 4) * SIGNALS_PER_PAGE).forEach((s, i) => {
                     const y = 130 + i * 54;
                     cv.text(s.iface.replace(/^de\.bmw\./, '') + '  ·  ' + s.field + (s.get ? '  get' : '') + (s.notify ? '  notify' : ''), 48, y, 20, t.text, { font: 'label', literal: true });
                     cv.text(s.members.slice(0, 10).join(', ').slice(0, 150), 72, y + 24, 16, t.dim, { font: 'label', literal: true });

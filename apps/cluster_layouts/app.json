@@ -2,7 +2,7 @@
   "id": "cluster_layouts",
   "title": "Cluster Layouts",
   "description": "Your own layout on the whole instrument cluster (round dials, gear, temperatures), drawn by the cluster itself",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "startType": "autostart",
   "vendor": "custom",
   "loggingId": "OA9L",
@@ -151,6 +151,17 @@
       "_instances": "AndroidAutoProjectedManagerInst1",
       "_optional": "directions on the cluster (M340i Sport): the route, CarPlay's, Android Auto's or BMW's: whether Android Auto is guiding",
       "projectedGuidanceActive": "rs"
+    },
+    "de.bmw.infotainment.checkcontrol.CheckControlMaster": {
+      "_instances": "1",
+      "_optional": "the car's warnings (Check Control) on the M340i layout",
+      "basicList": "rs"
+    },
+    "de.bmw.infotainment.KombiInterface_2": {
+      "_instances": "1",
+      "_optional": "the warnings' names (the cluster's Check Control list)",
+      "ccList": "rs",
+      "newCCMessage": "rs"
     }
   },
   "screens": [
@@ -473,6 +484,98 @@
         [
           "off",
           "Off"
+        ]
+      ]
+    },
+    {
+      "key": "sideLeft",
+      "label": "Side gauge, left (M340i Sport)",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off"
+        ],
+        [
+          "boost",
+          "Boost (psi)"
+        ],
+        [
+          "hp",
+          "Horsepower"
+        ],
+        [
+          "torque",
+          "Torque (lb-ft)"
+        ]
+      ]
+    },
+    {
+      "key": "sideRight",
+      "label": "Side gauge, right (M340i Sport)",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off"
+        ],
+        [
+          "boost",
+          "Boost (psi)"
+        ],
+        [
+          "hp",
+          "Horsepower"
+        ],
+        [
+          "torque",
+          "Torque (lb-ft)"
+        ]
+      ]
+    },
+    {
+      "key": "powerAt",
+      "label": "Horsepower and torque at",
+      "type": "choice",
+      "default": "crank",
+      "options": [
+        [
+          "crank",
+          "The crank (the engine's)"
+        ],
+        [
+          "wheel",
+          "The wheels (estimated)"
+        ]
+      ]
+    },
+    {
+      "key": "drivetrainLoss",
+      "label": "Drivetrain loss, for the wheels",
+      "type": "choice",
+      "default": "15",
+      "options": [
+        [
+          "10",
+          "10 %"
+        ],
+        [
+          "12",
+          "12 %"
+        ],
+        [
+          "15",
+          "15 %"
+        ],
+        [
+          "18",
+          "18 %"
+        ],
+        [
+          "20",
+          "20 %"
         ]
       ]
     },

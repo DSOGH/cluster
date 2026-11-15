@@ -31,6 +31,7 @@ const Awake = require('./kit/awake');
 const Media = require('./media');
 const Directions = require('./directions');
 const Artwork = require('./artwork');
+const Warnings = require('./warnings');
 
 const READY_MS = 1000;
 const ZS_KMH = 60 * 1.609344, ZS_MAX_MS = 25000, ZS_SHOW_MS = 12000;   // 0-60 mph (d.zeroSixty)   // the engine off and the car standing this long: READY (d.ready)
@@ -348,6 +349,8 @@ function startData(ctx, opts) {
     }
     /* the next turn while a route runs (directions.js), for an app that asks for it (opts.directions): asked only
      * while the M340i layout (the one that shows them) is shown with the car on and Settings > Directions is on */
+    // the car's warnings (warnings.js), for an app that asks (opts.warnings: Cluster Layouts)
+    const warnings = opts.warnings ? Warnings.startWarnings(ctx, log) : null;
     const directions = opts.directions
         ? Directions.startDirections(ctx, log, { wanted: () => active() && setting('directions') !== 'off' && setting('layout') === 'm340' }) : null;
     watch('de.bmw.infotainment.KombiIF', {
@@ -538,13 +541,14 @@ function startData(ctx, opts) {
             if (o.media && artwork && !d.demo) o.media.art = artwork.now();
             // the next turn (directions.js): { kind, dir, exit, dist, unit, road, ... } or null
             o.nav = d.demo ? null : directions ? directions.now() : null;
+            o.warnings = d.demo || !warnings ? [] : warnings.list();
             // the cruise control: on with a set speed (the head-up display's), off at 0
             if (!d.demo && Date.now() - (x.at.cruiseSet || 0) < 10000) o.cruise = { on: x.cruiseSet > 0 && x.cruiseSet < 250, set: x.cruiseSet > 0 && x.cruiseSet < 250 ? x.cruiseSet : undefined };
             return o;
         },
         /** The page on screen needs these (data keys): read them fast. */
         want(keys) { wanted = keys.map((k) => (k === 'boostTarget' || k === 'boostActual' ? 'boostCtl' : k === 'gearbox' ? 'egs' : k)); wantedT = Date.now(); },
-        status: () => Object.assign({ artwork: artwork ? artwork.status() : 'not asked', directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
+        status: () => Object.assign({ warnings: warnings ? warnings.status() : 'not asked', artwork: artwork ? artwork.status() : 'not asked', directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
         /** The vehicle in use: { vehicle 'phev' | 'ice', how: 'set' | 'found' | 'assumed', why }. */
         vehicle: () => ({ vehicle: vehicleNow(), how: setting('vehicle') === 'ice' || setting('vehicle') === 'phev' ? 'set' : detected.vehicle ? 'found' : 'assumed', why: detected.why }),
         /** fn() on each new reading (the car's speed and rpm samples, every changed reading). */

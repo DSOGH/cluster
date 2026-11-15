@@ -1924,9 +1924,35 @@ uniform float u_round;
 varying vec2 v_uv;
 void main() {
     vec2 p = v_uv * u_size, q = abs(p - u_size * 0.5) - (u_size * 0.5 - vec2(u_round));
-    float d = length(max(q, 0.0)) - u_round;
+    float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - u_round;   /* (negative inside, a square too) */
     vec4 c = texture2D(u_img, v_uv);
     gl_FragColor = vec4(c.rgb, c.a * clamp(0.5 - d, 0.0, 1.0));
+}`;
+
+/** A side gauge (boost, power, torque): a rounded upright bar, its track dark, filled from the bottom to u_value (0..1)
+ * in a gradient (u_c0 at the bottom, u_c1 at the top), a white cap on the fill, ticks every 1/u_ticks. */
+const M340VBAR_FS = `#version 100
+${HIGHP}
+uniform vec2 u_size;
+uniform float u_value;
+uniform float u_ticks;
+uniform vec3 u_c0;
+uniform vec3 u_c1;
+uniform vec3 u_track;
+varying vec2 v_uv;
+void main() {
+    vec2 p = vec2(v_uv.x, 1.0 - v_uv.y) * u_size;     /* from the bottom left, px */
+    float r = u_size.x * 0.5;
+    vec2 q = abs(p - u_size * 0.5) - (u_size * 0.5 - vec2(r));
+    float inside = clamp(0.5 - (length(max(q, 0.0)) - r), 0.0, 1.0);
+    float top = clamp(u_value, 0.0, 1.0) * u_size.y;
+    float f = clamp(top - p.y + 0.5, 0.0, 1.0);
+    vec3 c = mix(u_track, mix(u_c0, u_c1, clamp(p.y / u_size.y, 0.0, 1.0)), f);
+    float cap = step(2.0, top) * clamp(1.0 - abs(p.y - top + 2.0) / 2.0, 0.0, 1.0);
+    c = mix(c, vec3(1.0), cap);
+    float t = u_ticks > 0.5 ? fract(p.y / u_size.y * u_ticks) * u_size.y / u_ticks : 99.0;
+    c = mix(c, vec3(0.0), (1.0 - f) * step(t, 1.5) * step(4.0, p.y) * step(p.y, u_size.y - 4.0) * 0.6);
+    gl_FragColor = vec4(c, inside);
 }`;
 
 /** The map's veil: black over the map's window, clear where the map shows (u_veil: how much, the design's feathered edges). */
@@ -1941,4 +1967,4 @@ void main() {
     gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - clamp(texture2D(u_veil, v_uv).r * max(u_gain, 1.0), 0.0, 1.0));
 }`;
 
-module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, M340IMG_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };
+module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, M340IMG_FS, M340VBAR_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };

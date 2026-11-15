@@ -33,6 +33,7 @@ function args(argv) {
         else if (k === 'strip') a.strip = true;
         else if (k === 'dap') a.dap = true;
         else if (k === 'engine') a.engine = true;
+        else if (k === 'wheel') a.wheel = true;
         else if (k === 'art' && (!argv[i + 1] || /^--/.test(argv[i + 1]))) a.art = true;
         else a[k] = isNaN(Number(argv[i + 1])) ? argv[++i] : Number(argv[++i]);
     }
@@ -140,9 +141,9 @@ function navOf(v) {
 
 if (require.main === module) {
     const a = args(process.argv.slice(2));
-    const s = makeScene({ layout: a.layout, look: a.look, black: !!a.black, options: { centre: a.centre, speedUnit: a.kmh ? 'kmh' : 'mph', vehicle: a.engine ? 'ice' : 'phev', cluster: a.mcar ? 'm' : 'standard', bottomStrip: a.strip ? 'stock' : 'layout' },
+    const s = makeScene({ layout: a.layout, look: a.look, black: !!a.black, options: { centre: a.centre, speedUnit: a.kmh ? 'kmh' : 'mph', vehicle: a.engine ? 'ice' : 'phev', cluster: a.mcar ? 'm' : 'standard', bottomStrip: a.strip ? 'stock' : 'layout', sideLeft: a.left || 'off', sideRight: a.right || 'off', powerAt: a.wheel ? 'wheel' : 'crank', drivetrainLoss: 15 },
         data: { speed: a.speed * (a.kmh ? 1 : 1.609344), rpm: a.rpm, gear: a.gear, stage: a.stage, mode: a.mode, driveMode: a.drive, oil: a.oil, coolant: a.coolant, outside: a.outside, soc: a.soc, kw: a.kw, erange: a.erange, frange: a.frange,
-            gearbox: a.gearbox, iat: a.iat, battTemp: a.batt, boostActual: a.boost, torque: 312, timing: 14.5, hpfp: 205, boostTarget: 0.9, engineOn: a.rpm > 300, media: songOf(a.song) && Object.assign(songOf(a.song), { art: artOf(a.art) }), nav: navOf(a.nav), zeroSixty: a.zs ? { s: Number(a.zs), best: Number(a.zs), isBest: true } : null, tyres: { p: { FL: 2.48, FR: 2.50, RL: 2.62, RR: 2.60 }, t: { FL: 24, FR: 25, RL: 27, RR: 26 } }, fuelPct: a.fuel, pdDrive: 62, pdClimate: 24, pdSeats: 14, dap: a.dap ? require('../apps/cluster_layouts/dap').DEMO : null } });
+            gearbox: a.gearbox, iat: a.iat, battTemp: a.batt, boostActual: a.boost, torque: 312, timing: 14.5, hpfp: 205, boostTarget: 0.9, engineOn: a.rpm > 300, media: songOf(a.song) && Object.assign(songOf(a.song), { art: artOf(a.art) }), nav: navOf(a.nav), warnings: a.warn ? String(a.warn).split('|').map((n, i) => ({ id: String(i), name: n.replace(/^!/, ''), red: n[0] === '!' })) : [], zeroSixty: a.zs ? { s: Number(a.zs), best: Number(a.zs), isBest: true } : null, tyres: { p: { FL: 2.48, FR: 2.50, RL: 2.62, RR: 2.60 }, t: { FL: 24, FR: 25, RL: 27, RR: 26 } }, fuelPct: a.fuel, pdDrive: 62, pdClimate: 24, pdSeats: 14, dap: a.dap ? require('../apps/cluster_layouts/dap').DEMO : null } });
     // let the needles ease to their readings
     // two minutes first, on a made-up clock, so trend lines have a past
     const base = Object.assign({}, s.data()), now = Date.now;
