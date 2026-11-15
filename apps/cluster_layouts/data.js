@@ -30,7 +30,6 @@ const { createFuse } = require('./kwfuse');
 const Awake = require('./kit/awake');
 const Media = require('./media');
 const Directions = require('./directions');
-const Artwork = require('./artwork');
 const Warnings = require('./warnings');
 
 const READY_MS = 1000;
@@ -327,18 +326,14 @@ function startData(ctx, opts) {
      * declares the interface; the runtime spec on the car does not carry the declarations):
      * the centre screen's instance, each field's raw value kept for the Signals screen */
     const media = opts.media ? Media.createMedia() : null;
-    // the song's artwork (artwork.js): looked for where the head unit keeps it at each change of song
-    const artwork = media ? Artwork.createArtwork({ dataDir: ctx.dataDir, log }) : null;
-    const mediaRaw = {};
     if (media) {
         // (each change of what is read logged, with where each part came from: the log shows why a title is missing)
         let said = null;
         const put = (k, name) => (v) => {
-            fes(name)(v); media.put(k, v); mediaRaw[name] = v;
+            fes(name)(v); media.put(k, v);
             const n = media.now();
-            artwork.song(n ? n.title + '\n' + n.artist : '', mediaRaw);
             const line = n ? 'title "' + n.title + '" (' + (n.from.title || 'none') + '), artist "' + n.artist + '" (' + (n.from.artist || 'none') + ')' : 'nothing playing';
-            // (the values themselves too, shortened: what the player sends, the artwork's place among it if it is there)
+            // (the values themselves too, shortened: what the player sends)
             if (line !== said) { said = line; log.info('media: ' + line + ' [' + name + ' ' + (v && typeof v === 'object' ? JSON.stringify(v).slice(0, 600) : String(v)) + ']'); }
         };
         ctx.signals.watch(Media.IFACE, Media.INSTANCE, {
@@ -538,7 +533,6 @@ function startData(ctx, opts) {
             o.zeroSixty = zs.last && tNow - zs.at < ZS_SHOW_MS ? { s: zs.last, best: zs.best, isBest: zs.best === zs.last } : null;
             // the song playing (media.js): { title, artist, album, elapsed } or null
             o.media = d.demo ? DEMO_SONG(tNow) : media ? media.now() : null;
-            if (o.media && artwork && !d.demo) o.media.art = artwork.now();
             // the next turn (directions.js): { kind, dir, exit, dist, unit, road, ... } or null
             o.nav = d.demo ? null : directions ? directions.now() : null;
             o.warnings = d.demo || !warnings ? [] : warnings.list();
@@ -548,7 +542,7 @@ function startData(ctx, opts) {
         },
         /** The page on screen needs these (data keys): read them fast. */
         want(keys) { wanted = keys.map((k) => (k === 'boostTarget' || k === 'boostActual' ? 'boostCtl' : k === 'gearbox' ? 'egs' : k)); wantedT = Date.now(); },
-        status: () => Object.assign({ warnings: warnings ? warnings.status() : 'not asked', artwork: artwork ? artwork.status() : 'not asked', directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
+        status: () => Object.assign({ warnings: warnings ? warnings.status() : 'not asked', directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
         /** The vehicle in use: { vehicle 'phev' | 'ice', how: 'set' | 'found' | 'assumed', why }. */
         vehicle: () => ({ vehicle: vehicleNow(), how: setting('vehicle') === 'ice' || setting('vehicle') === 'phev' ? 'set' : detected.vehicle ? 'found' : 'assumed', why: detected.why }),
         /** fn() on each new reading (the car's speed and rpm samples, every changed reading). */

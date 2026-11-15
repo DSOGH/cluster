@@ -57,15 +57,18 @@ const EPS = 0.0015;          // a value moving less than this (of its max) is no
 const SWEEP_MS = 700;        // up, then as long back down
 /* a gliding value (glide: true): each new reading reached over about the time the readings come apart (measured),
  * within these bounds; a gap longer than GLIDE_GAP_MS is a pause, not a rate */
-const GLIDE_MIN_MS = 30, GLIDE_MAX_MS = 180, GLIDE_GAP_MS = 400;
+const GLIDE_MIN_MS = 40, GLIDE_MAX_MS = 220, GLIDE_GAP_MS = 400;
 /* each glide a little longer than the time between readings (GLIDE_OVERLAP), so the next reading comes while the
  * value still moves: one continuous motion through a run of readings, no stop and start at each (the stutter); a fall
  * to 0 from above GLIDE_DROP_FROM of the scale (the engine stopping) takes GLIDE_DROP_MS, the needle sinking as a
  * cluster's does */
-const GLIDE_OVERLAP = 1.25, GLIDE_DROP_MS = 650, GLIDE_DROP_FROM = 0.04;
+const GLIDE_OVERLAP = 1.3, GLIDE_DROP_MS = 650, GLIDE_DROP_FROM = 0.04;
+/* each glide a cubic in GLIDE_KEYS straight pieces (the renderer plays straight lines between keys), its end speed the
+ * readings' own pace times GLIDE_PACE */
+const GLIDE_KEYS = 6, GLIDE_PACE = 0.9;
 const FS = { flat: SH.FLAT_FS, panel: SH.PANEL_FS, dial: SH.DIAL_FS, band: SH.BAND_FS, text: SH.TEXT_FS, bg: SH.BG_FS, icon: SH.ICON_FS, spark: SH.SPARK_FS, car: SH.CAR_FS, leds: SH.LEDS_FS, flag: SH.FLAG_FS, eagles: SH.EAGLE_FS, fireworks: SH.FIREWORKS_FS, road: SH.ROAD_FS, chevron: SH.CHEVRON_FS, mdash: SH.MDASH_FS, mtach: SH.MTACH_FS, sdash: SH.SDASH_FS, licon: SH.LICON_FS, e9x: SH.E9X_FS, mbar: SH.MBAR_FS,
-    m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS, m340text: SH.M340TEXT_FS, m340img: SH.M340IMG_FS, m340vbar: SH.M340VBAR_FS };
-const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950, m340text: 20, m340img: 20, m340vbar: 15 };
+    m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS, m340text: SH.M340TEXT_FS, m340img: SH.M340IMG_FS, m340vbar: SH.M340VBAR_FS, m340dial: SH.M340DIAL_FS };
+const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950, m340text: 20, m340img: 20, m340vbar: 15, m340dial: 15 };
 /* how far below z 0 the pieces under the Waze map go (opts.underMap): the lowest (-210) stays above -1000 */
 const UNDER_MAP_Z = 600;
 /* kinds that animate (u_time): their clock sent from the head unit every frame (values()) */
@@ -320,29 +323,45 @@ function startCluster(opts) {
     }
 
     /**
-     * A gliding value's new reading: the cluster plays a straight line from where the value stands now to the
-     * reading, over about the time between the car's readings, and holds it there. Two messages a reading (the start, the glide), none
-     * between; the motion is the cluster's own, at its frame rate.
+     * A gliding value's new reading: the cluster plays a curve from where the value stands now, at the speed it moves
+     * there, to the reading, over a little more than the time between the car's readings, and holds it there. Two
+     * messages a reading (the start, the glide), none between; the motion is the cluster's own, at its frame rate.
      */
     function glide(p, want, max, now) {
-        const g = p.glide || (p.glide = { from: p.value, to: p.value, at: now, ms: 0, gap: 0, seen: 0, anim: 0 });
-        if (Math.abs(want - g.to) < max * EPS) return;
+        const g = p.glide || (p.glide = { p0: p.value, v0: 0, p1: p.value, v1: 0, at: now, ms: 0, gap: 0, seen: 0, last: p.value, anim: 0 });
+        if (Math.abs(want - g.p1) < max * EPS) return;
         // the time between readings that moved it (an average of the recent ones; a long pause does not count)
         const gap = g.seen ? now - g.seen : 0;
         if (gap > 0 && gap < GLIDE_GAP_MS) g.gap = g.gap ? g.gap * 0.75 + gap * 0.25 : gap;
-        g.seen = now;
-        // where the value stands now, partway along the last glide
-        const f = g.ms ? Math.min(1, (now - g.at) / g.ms) : 1, at = g.from + (g.to - g.from) * f;
-        const drop = want <= max * 0.002 && at > max * GLIDE_DROP_FROM;
+        // the reading's own pace (value a ms), for the curve's end: the motion goes on through each reading
+        const pace = gap > 0 && gap < GLIDE_GAP_MS ? (want - g.last) / gap : 0;
+        g.seen = now; g.last = want;
+        // where the value stands now on the last curve, and how fast it moves there
+        const cur = curve(g, now);
+        const drop = want <= max * 0.002 && cur.p > max * GLIDE_DROP_FROM;
         const ms = drop ? GLIDE_DROP_MS : Math.round(Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, (g.gap || GLIDE_MIN_MS) * GLIDE_OVERLAP)));
-        const v = (x) => Math.round(x * 10000) / 10000;
+        // the new curve: from here at the speed it has now, to the reading, arriving at the reading's own pace (a
+        // cubic: no jump in speed at a reading, as a needle's own inertia), held inside the scale
+        g.p0 = cur.p; g.v0 = drop ? 0 : cur.v; g.p1 = want; g.v1 = drop ? 0 : Math.max(-max / ms, Math.min(max / ms, pace * GLIDE_PACE)); g.at = now; g.ms = ms;
+        const v = (x) => Math.round(Math.max(0, Math.min(max * 1.02, x)) * 10000) / 10000;
+        const keys = [];
+        for (let k = 0; k <= GLIDE_KEYS; k++) { const t = Math.round(ms * k / GLIDE_KEYS); keys.push(t + ':' + v(curve(g, now + t).p)); }
         // the value the layer holds set to where the glide starts first: the renderer puts a replaced animation's
         // value back to it (and a republished scene starts from it), so between two glides the fill stays where it
         // is instead of dropping to the last value set (0 since the start-up sweep), seen as a flutter on the car
-        cr.uniform(p.ref, 'u_value', [v(at)]);
-        g.anim = cr.animate(p.ref, { property: 'uniform', name: 'u_value', keys: '0:' + v(at) + ' ' + ms + ':' + v(want), loop: false, anim: g.anim }) || g.anim;
-        g.from = at; g.to = want; g.at = now; g.ms = ms;
+        cr.uniform(p.ref, 'u_value', [v(cur.p)]);
+        g.anim = cr.animate(p.ref, { property: 'uniform', name: 'u_value', keys: keys.join(' '), loop: false, anim: g.anim }) || g.anim;
         p.value = want; p.sent = want;
+    }
+    /** A glide's cubic (Hermite: from p0 at speed v0 to p1 at speed v1 over ms) at time t: { p, v } (speed a ms). */
+    function curve(g, t) {
+        if (!g.ms) return { p: g.p1, v: 0 };
+        const T = g.ms, u = Math.max(0, Math.min(1, (t - g.at) / T));
+        if (u >= 1) return { p: g.p1, v: 0 };
+        const u2 = u * u, u3 = u2 * u;
+        const p = (2 * u3 - 3 * u2 + 1) * g.p0 + (u3 - 2 * u2 + u) * T * g.v0 + (-2 * u3 + 3 * u2) * g.p1 + (u3 - u2) * T * g.v1;
+        const v = ((6 * u2 - 6 * u) * g.p0 + (3 * u2 - 4 * u + 1) * T * g.v0 + (-6 * u2 + 6 * u) * g.p1 + (3 * u2 - 2 * u) * T * g.v1) / T;
+        return { p, v };
     }
 
     /** The start-up sweep: each needle and band to full and back, played by the cluster. */

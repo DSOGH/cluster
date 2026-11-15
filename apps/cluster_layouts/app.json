@@ -2,7 +2,7 @@
   "id": "cluster_layouts",
   "title": "Cluster Layouts",
   "description": "Your own layout on the whole instrument cluster (round dials, gear, temperatures), drawn by the cluster itself",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "startType": "autostart",
   "vendor": "custom",
   "loggingId": "OA9L",
@@ -508,6 +508,22 @@
         [
           "torque",
           "Torque (lb-ft)"
+        ],
+        [
+          "oil",
+          "Oil temperature"
+        ],
+        [
+          "coolant",
+          "Coolant temperature"
+        ],
+        [
+          "gforce",
+          "G-force"
+        ],
+        [
+          "speedkmh",
+          "Speed in km/h"
         ]
       ]
     },
@@ -532,6 +548,54 @@
         [
           "torque",
           "Torque (lb-ft)"
+        ],
+        [
+          "oil",
+          "Oil temperature"
+        ],
+        [
+          "coolant",
+          "Coolant temperature"
+        ],
+        [
+          "gforce",
+          "G-force"
+        ],
+        [
+          "speedkmh",
+          "Speed in km/h"
+        ]
+      ]
+    },
+    {
+      "key": "styleLeft",
+      "label": "Side gauge style, left",
+      "type": "choice",
+      "default": "bar",
+      "options": [
+        [
+          "bar",
+          "Upright bar"
+        ],
+        [
+          "dial",
+          "Round dial"
+        ]
+      ]
+    },
+    {
+      "key": "styleRight",
+      "label": "Side gauge style, right",
+      "type": "choice",
+      "default": "bar",
+      "options": [
+        [
+          "bar",
+          "Upright bar"
+        ],
+        [
+          "dial",
+          "Round dial"
         ]
       ]
     },

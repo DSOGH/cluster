@@ -94,6 +94,7 @@ mgu.run({
             directions: settings.get('directions') === 'off' ? 'off' : 'on',   // (M340i Sport: the next turn at the top of the centre)
             // (M340i Sport: the side gauges, and where their power and torque are taken)
             sideLeft: settings.get('sideLeft') || 'off', sideRight: settings.get('sideRight') || 'off',
+            styleLeft: settings.get('styleLeft') === 'dial' ? 'dial' : 'bar', styleRight: settings.get('styleRight') === 'dial' ? 'dial' : 'bar',
             powerAt: settings.get('powerAt') === 'wheel' ? 'wheel' : 'crank', drivetrainLoss: Number(settings.get('drivetrainLoss')) || 15,
             vehicle: D.vehicle().vehicle,      // set, or found from the car (Auto)
         });
@@ -162,7 +163,7 @@ mgu.run({
         settings.onChange((k) => {
             if (k === 'look' || k === 'background') return cluster.recolour();
             if (k === 'layout') layout = byId(settings.get('layout'));
-            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'sideLeft', 'sideRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
+            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'sideLeft', 'sideRight', 'styleLeft', 'styleRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
         });
 
         /* ---------- the car's range and charge signals, from its own catalog ---------- */
@@ -183,19 +184,26 @@ mgu.run({
             const d = data(), o = options(), L = require('./layout_m340');
             cv.text('Side gauges   ·   Settings > Side gauge, left / right', 48, 70, 26, t.text, { font: 'bold', literal: true });
             const sample = !(isNum(d.rpm) && d.rpm > 300);
-            const dd = sample ? Object.assign({}, d, { rpm: 4800, torque: 480, boostActual: 1.05 }) : d;
+            const dd = sample ? Object.assign({}, d, { rpm: 4800, torque: 480, boostActual: 1.05, oil: 105, coolant: 95, gLong: 0.4, gLat: 0.3, speed: 96 }) : d;
             ['left', 'right'].forEach((side, i) => {
                 const kind = o['side' + (side === 'left' ? 'Left' : 'Right')], x = 120 + i * 560;
                 cv.text(side === 'left' ? 'Left' : 'Right', x, 130, 22, t.dim, { font: 'bold', literal: true });
                 if (!kind || kind === 'off') { cv.text('Off', x, 170, 30, t.dim, { font: 'bold', literal: true }); return; }
                 const r = L.sideReading(kind, o, dd), K = L.SIDE_KINDS[kind];
-                const f = Math.max(0, Math.min(1, (r.value || 0) / K.max)), bx = x, by = 150, bw = 44, bh = 300;
-                cv.roundRect(bx, by, bw, bh, bw / 2, '#151c2a');
-                if (f > 0) cv.roundRect(bx, by + bh * (1 - f), bw, bh * f, bw / 2, K.c[1]);
-                cv.fillRect(bx, by + bh * (1 - f), bw, 3, '#ffffff');
+                const f = Math.max(0, Math.min(1, ((r.value || 0) - (K.min || 0)) / (K.max - (K.min || 0)))), bx = x, by = 150, bw = 44, bh = 300;
+                if (o['style' + (side === 'left' ? 'Left' : 'Right')] === 'dial') {
+                    // the dial: its ring from the lower left clockwise, lit to the reading
+                    const cx = bx + 22, cy = by + 150, R = 70;
+                    cv.arc(cx, cy, R - 14, R, 225, 495, '#151c2a');
+                    if (f > 0) cv.arc(cx, cy, R - 14, R, 225, 225 + 270 * f, K.c[1]);
+                } else {
+                    cv.roundRect(bx, by, bw, bh, bw / 2, '#151c2a');
+                    if (f > 0) cv.roundRect(bx, by + bh * (1 - f), bw, bh * f, bw / 2, K.c[1]);
+                    cv.fillRect(bx, by + bh * (1 - f), bw, 3, '#ffffff');
+                }
                 cv.text(r.text, bx + 80, by + 120, 64, t.text, { font: 'bold', literal: true });
                 cv.text(r.unit + (sample ? '   (a sample: the engine is off)' : ''), bx + 84, by + 160, 22, t.dim, { font: 'bold', literal: true });
-                cv.text({ boost: 'Boost over the air outside', hp: 'Horsepower from torque and revs', torque: 'Torque, the engine\'s reading' }[kind]
+                cv.text({ boost: 'Boost over the air outside', hp: 'Horsepower from torque and revs', torque: 'Torque, the engine\'s reading', oil: 'Oil temperature', coolant: 'Coolant temperature', gforce: 'G-force, braking, cornering and accelerating together', speedkmh: 'Speed in km/h' }[kind]
                     + (kind !== 'boost' ? (o.powerAt === 'wheel' ? ', at the wheels (less ' + o.drivetrainLoss + ' %)' : ', at the crank') : ''), bx + 84, by + 196, 18, t.dim, { font: 'label', literal: true });
             });
             cv.text('Warnings: ' + (D.status().warnings || '-'), 48, 490, 16, t.dim, { font: 'label', literal: true });
@@ -323,8 +331,6 @@ mgu.run({
                     + '   ·   album "' + ((m && m.album) || '') + '"', 48, y + 24, 18, t.text, { font: 'bold', literal: true });
                 // the directions (shared/directions.js): whether a route runs, each source, the turns' replies
                 cv.text('Directions: ' + (D.status().directions || '-'), 48, y + 56, 16, t.dim, { font: 'label', literal: true });
-                // the artwork (shared/artwork.js): where it was found, or what the search looked at
-                cv.text('Artwork: ' + String(D.status().artwork || '-').slice(0, 150), 48, y + 80, 16, t.dim, { font: 'label', literal: true });
                 return ui.image('MAIN_GFX', cv);
             }
             if (page === 4) return ui.image('MAIN_GFX', widgetsPage(cv, t));

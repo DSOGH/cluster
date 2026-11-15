@@ -29,7 +29,7 @@ const M = ART.META;
 const isNum = C.isNum;
 const KMH_PER_MPH = 1.609344;
 const RPM_MAX = 8000;
-const VEIL_GAIN = 2;          // the map's faded edges: the design's fade, half as wide (the map brighter)
+const VEIL_GAIN = 1.6;        // the map's faded edges: the design's fade, narrower (the map brighter), eased in the shader
 const OVER_MAP = 960;
 const MODE_BASE = 671;       // the drive mode's baseline: its letters centred on the blue blocks (y 633 to 690)        // over Waze on cluster's map layer (its kWindowZ, 900) and the veil (950)
 
@@ -210,11 +210,11 @@ function line(key, set, at, align, room, say, colour, o) {
  * from when the song changed: the car gives no position or length). The two text lines are drawn on the head unit
  * in the kit's fonts (any script) and sent as pictures when the song changes ('m340text', live).
  */
-/* the song: its artwork, the title and the artist beside it (Pirulen, baked for the head unit's canvas: pir), as
- * one picture drawn on the head unit at each change of song, centred on the display; the time played below. In the
- * centre panel, or along the bottom of the map's window over the map. */
-const NP = { x: 560, y: 430, w: 800, h: 104, art: 96, title: 26, sub: 17, timeBase: 556 };
-const NP_MAP = { x: 610, y: 536, w: 700, h: 64, art: 60, title: 20, sub: 14 };
+/* the song: the title over the artist (Pirulen, baked for the head unit's canvas: pir), as one picture drawn on the
+ * head unit at each change of song, centred on the display, low in the centre panel; over the map, along the bottom
+ * edge of its window, where the map has faded out */
+const NP = { x: 560, y: 488, w: 800, h: 64, title: 24, sub: 16 };
+const NP_MAP = { x: 610, y: 560, w: 700, h: 46, title: 18, sub: 13 };
 let Canvas = null;
 /** A line of text as one byte a pixel (its coverage), w x h, centred (left: from the left), cut with "..." when too long. */
 function textPx(str, w, h, size, font, left) {
@@ -335,67 +335,32 @@ function zeroSixtyPiece(z) {
     return { key: 'zeroSixty', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
         colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.zeroSixty && !d.nav, z, overMap: true, topMiddle: true };
 }
-/** The artwork's placeholder (no artwork found): a dark tile with a note, S x S RGBA. */
-let notePx = null;
-function placeholderPx(S) {
-    if (notePx) return notePx;
-    if (!Canvas) Canvas = require('./kit/canvas').Canvas;
-    const cv = new Canvas(S, S).clear('#1b2433'), c = '#7d8aa3';
-    cv.circle(S * 0.38, S * 0.66, S * 0.1, c); cv.circle(S * 0.66, S * 0.6, S * 0.1, c);
-    cv.line(S * 0.47, S * 0.66, S * 0.47, S * 0.3, S * 0.05, c); cv.line(S * 0.75, S * 0.6, S * 0.75, S * 0.24, S * 0.05, c);
-    cv.line(S * 0.47, S * 0.3, S * 0.75, S * 0.24, S * 0.07, c);
-    notePx = Buffer.from(cv.d);
-    return notePx;
-}
-/** The song card as RGBA w x h: the artwork (128 x 128 RGBA, scaled to c.art, corners rounded) and the two lines beside
- * it, the whole centred across. */
+/** The song card as RGBA w x h: the title over the artist (and album), each line centred. */
 function cardPx(m, c) {
     if (!Canvas) Canvas = require('./kit/canvas').Canvas;
-    const cv = new Canvas(c.w, c.h), f = { font: 'pir', literal: true }, gap = Math.round(c.art * 0.18);
+    const cv = new Canvas(c.w, c.h), f = { font: 'pir', literal: true, align: 'center' }, room = c.w - 8;
     const title = m.title || m.artist || '', sub = m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album || '';
-    const room = c.w - c.art - gap - 4;
     const fit = (str, size) => { let x = String(str); if (cv.textWidth(x, size, f) <= room) return x; while (x.length > 1 && cv.textWidth(x + '...', size, f) > room) x = x.slice(0, -1); return x.replace(/\s+$/, '') + '...'; };
-    const t = fit(title, c.title), u = sub ? fit(sub, c.sub) : '';
-    const tw = Math.max(cv.textWidth(t, c.title, f), u ? cv.textWidth(u, c.sub, f) : 0);
-    const x0 = Math.round((c.w - (c.art + gap + tw)) / 2), ay = Math.round((c.h - c.art) / 2);
-    // the artwork, scaled from 128 (box filter) into place, corners rounded
-    const src = (m.art && m.art.px) || placeholderPx(128), k = 128 / c.art, rad = c.art * 0.12;
-    for (let y = 0; y < c.art; y++) for (let x = 0; x < c.art; x++) {
-        const dx = Math.max(0, Math.abs(x + 0.5 - c.art / 2) - (c.art / 2 - rad)), dy = Math.max(0, Math.abs(y + 0.5 - c.art / 2) - (c.art / 2 - rad));
-        const cover = Math.max(0, Math.min(1, rad + 0.5 - Math.hypot(dx, dy)));
-        if (!cover) continue;
-        let r = 0, g = 0, b = 0, n = 0;
-        for (let sy = Math.floor(y * k); sy < Math.floor((y + 1) * k); sy++) for (let sx = Math.floor(x * k); sx < Math.floor((x + 1) * k); sx++) {
-            const i = (sy * 128 + sx) * 4; r += src[i]; g += src[i + 1]; b += src[i + 2]; n++;
-        }
-        const o = ((ay + y) * c.w + x0 + x) * 4;
-        cv.d[o] = r / n; cv.d[o + 1] = g / n; cv.d[o + 2] = b / n; cv.d[o + 3] = Math.round(255 * cover);
-    }
-    const tx = x0 + c.art + gap;
-    if (u) {
-        cv.text(t, tx, Math.round(c.h * 0.46), c.title, '#ffffff', f);
-        cv.text(u, tx, Math.round(c.h * 0.8), c.sub, '#a2abbb', f);
-    } else cv.text(t, tx, Math.round(c.h / 2 + c.title * 0.36), c.title, '#ffffff', f);
+    if (sub) {
+        cv.text(fit(title, c.title), c.w / 2, Math.round(c.h * 0.48), c.title, '#ffffff', f);
+        cv.text(fit(sub, c.sub), c.w / 2, Math.round(c.h * 0.9), c.sub, '#a2abbb', f);
+    } else cv.text(fit(title, c.title), c.w / 2, Math.round(c.h / 2 + c.title * 0.36), c.title, '#ffffff', f);
     return Buffer.from(cv.d);
 }
-/** The song: the card (one RGBA picture, drawn again when the song or its artwork changes), and in the centre panel
- * the time played below it. Hidden while a warning shows (it stands in the same place). at.z: over the map. */
+/** The song: the card (one RGBA picture, drawn again when the song changes). Hidden while a warning shows (it stands
+ * in the same place). at.z: over the map. */
 function nowPlaying(at) {
     let last = null;
     const draw = (d) => {
         const m = d.media;
         if (!m) return null;
-        const key = [m.title, m.artist, m.album, m.art ? m.art.key : ''].join('|');
+        const key = [m.title, m.artist, m.album].join('|');
         if (!last || last.key !== key) last = { key, px: cardPx(m, at) };
         return last;
     };
     const show = (d) => !!d.media && !(d.warnings && d.warnings.length);
-    const time = (d) => { if (!show(d)) return ''; const e = Math.floor(d.media.elapsed); return Math.floor(e / 60) + ':' + String(e % 60).padStart(2, '0'); };
-    return [
-        { key: 'npCard', kind: 'm340img', x: at.x, y: at.y, w: at.w, h: at.h, live: { name: 'u_img', w: at.w, h: at.h, format: 'rgba8', draw },
-            params: { u_round: [0] }, visible: show, z: at.z, overMap: !!at.z },
-        ...(at.timeBase ? line('npTime', 'small', { x: 960, base: at.timeBase }, 'middle', 140, time, 'dim', { more: { visible: show } }) : []),
-    ];
+    return [{ key: 'npCard', kind: 'm340img', x: at.x, y: at.y, w: at.w, h: at.h, live: { name: 'u_img', w: at.w, h: at.h, format: 'rgba8', draw },
+        params: { u_round: [0] }, visible: show, z: at.z, overMap: !!at.z }];
 }
 
 /*
@@ -453,7 +418,15 @@ const SIDE_KINDS = {
     boost: { max: 25, ticks: 5, unit: 'PSI', of: (d) => (isNum(d.boostActual) ? Math.max(0, d.boostActual * 14.5038) : null), fmt: (v) => v.toFixed(1), c: ['#0a3d8f', '#3cd7ff'] },
     hp: { max: 500, ticks: 5, unit: 'HP', of: null, fmt: (v) => String(Math.round(v)), c: ['#7a0d1a', '#ff4457'] },
     torque: { max: 500, ticks: 5, unit: 'LB-FT', of: null, fmt: (v) => String(Math.round(v)), c: ['#5a2a00', '#ffb020'] },
+    oil: { min: 100, max: 320, ticks: 4, unit: 'OIL F', of: (d) => (isNum(d.oil) ? d.oil * 9 / 5 + 32 : null), fmt: (v) => String(Math.round(v)), c: ['#0a3d8f', '#ff4457'] },
+    coolant: { min: 100, max: 260, ticks: 4, unit: 'H2O F', of: (d) => (isNum(d.coolant) ? d.coolant * 9 / 5 + 32 : null), fmt: (v) => String(Math.round(v)), c: ['#0a3d8f', '#ff4457'] },
+    gforce: { max: 1.2, ticks: 4, unit: 'G', of: (d) => (isNum(d.gLong) || isNum(d.gLat) ? Math.hypot(d.gLong || 0, d.gLat || 0) : null), fmt: (v) => v.toFixed(2), c: ['#1d6b3a', '#3ddc84'] },
+    speedkmh: { max: 250, ticks: 5, unit: 'KM/H', of: (d) => (isNum(d.speed) ? d.speed : null), fmt: (v) => String(Math.round(v)), c: ['#0a3d8f', '#3cd7ff'] },
 };
+/** A reading as a place along a gauge (0..1), from its kind's min (0 by default) to its max. */
+const sideFrac = (K, v) => clamp01(((v || 0) - (K.min || 0)) / (K.max - (K.min || 0)));
+/* the round side gauges (Settings > Side gauge style: Round): in each outer gap, beside the scales' middle */
+const SIDE_D = { left: { cx: 70 }, right: { cx: 1850 }, cy: 452, r: 58 };
 /** A side gauge's reading: its value (in its unit), as text, and its unit. */
 function sideOf(kind, o) {
     const K = SIDE_KINDS[kind], wheel = o.powerAt === 'wheel', keep = 1 - (Number(o.drivetrainLoss) || 15) / 100;
@@ -468,6 +441,7 @@ function sideReading(kind, o, d) {
     return { value: v, text: v === null ? '--' : SIDE_KINDS[kind].fmt(v), unit: r.unit };
 }
 function sideGauge(side, kind, o) {
+    if ((side === 'left' ? o.styleLeft : o.styleRight) === 'dial') return sideDial(side, kind, o);
     const K = SIDE_KINDS[kind], at = SIDE_G[side], { of, unit } = sideOf(kind, o);
     let lbl = null;
     const label = () => {
@@ -482,9 +456,31 @@ function sideGauge(side, kind, o) {
     return [
         { key: 'side_' + side, kind: 'm340vbar', x: at.x, y: SIDE_G.y, w: SIDE_G.w, h: SIDE_G.h,
             params: { u_ticks: [K.ticks], u_track: hexRGB('#151c2a') }, colors: () => ({ c0: K.c[0], c1: K.c[1] }),
-            value: (d) => clamp01((of(d) || 0) / K.max), max: 1, glide: true },
+            value: (d) => sideFrac(K, of(d)), max: 1, glide: true },
         ...line('sideVal_' + side, 'small', { x: at.cx, base: SIDE_G.y - 12 }, 'middle', 110, (d) => { const v = of(d); return v === null ? '' : K.fmt(v); }, 'fg'),
         { key: 'sideUnit_' + side, kind: 'm340text', x: at.cx - 48, y: SIDE_G.y + SIDE_G.h + 8, w: 96, h: 28, live: { name: 'u_text', w: 96, h: 28, draw: label },
+            colors: (t) => ({ color: [t.dim, 1] }) },
+    ];
+}
+/** A side gauge as a dial: the ring, its reading in the middle and the unit below it. */
+function sideDial(side, kind, o) {
+    const K = SIDE_KINDS[kind], cx = SIDE_D[side].cx, R = SIDE_D.r, { of, unit } = sideOf(kind, o);
+    let lbl = null;
+    const label = () => {
+        if (lbl) return lbl;
+        if (!Canvas) Canvas = require('./kit/canvas').Canvas;
+        const cv = new Canvas(96, 24);
+        cv.text(unit, 48, 17, 13, '#ffffff', { font: 'pir', literal: true, align: 'center' });
+        const px = Buffer.alloc(96 * 24);
+        for (let i = 0; i < px.length; i++) px[i] = cv.d[i * 4 + 3];
+        return (lbl = { key: unit, px });
+    };
+    return [
+        { key: 'dial_' + side, kind: 'm340dial', x: cx - R, y: SIDE_D.cy - R, w: 2 * R, h: 2 * R,
+            params: { u_ticks: [K.ticks], u_track: hexRGB('#151c2a') }, colors: () => ({ c0: K.c[0], c1: K.c[1] }),
+            value: (d) => sideFrac(K, of(d)), max: 1, glide: true },
+        ...line('dialVal_' + side, 'small', { x: cx, base: SIDE_D.cy + 8 }, 'middle', 100, (d) => { const v = of(d); return v === null ? '' : K.fmt(v); }, 'fg'),
+        { key: 'dialUnit_' + side, kind: 'm340text', x: cx - 48, y: SIDE_D.cy + 20, w: 96, h: 24, live: { name: 'u_text', w: 96, h: 24, draw: label },
             colors: (t) => ({ color: [t.dim, 1] }) },
     ];
 }

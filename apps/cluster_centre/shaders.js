@@ -1955,6 +1955,36 @@ void main() {
     gl_FragColor = vec4(c, inside);
 }`;
 
+/** A round side gauge: a ring from the lower left clockwise round to the lower right (270 degrees), its track dark,
+ * lit to u_value (0..1) in a gradient (u_c0 at the start, u_c1 at the end), a white tip at the reading, ticks every
+ * 1/u_ticks. The reading and its unit are separate layers in the middle. */
+const M340DIAL_FS = `#version 100
+${HIGHP}
+uniform vec2 u_size;
+uniform float u_value;
+uniform float u_ticks;
+uniform vec3 u_c0;
+uniform vec3 u_c1;
+uniform vec3 u_track;
+varying vec2 v_uv;
+void main() {
+    vec2 p = (v_uv - 0.5) * u_size;
+    p.y = -p.y;
+    float R = min(u_size.x, u_size.y) * 0.5 - 1.0, W = R * 0.2, r = length(p);
+    float ring = clamp(W * 0.5 - abs(r - (R - W * 0.5)) + 0.5, 0.0, 1.0);
+    /* the angle from the start (lower left, 225 degrees from twelve o'clock, clockwise), as 0..1 of the 270 */
+    float a = atan(p.x, p.y);                  /* clockwise from twelve: -pi..pi */
+    float f = (a + 2.35619449) / 4.71238898;   /* -135 degrees .. 135 degrees -> 0 .. 1 */
+    float on = step(0.0, f) * step(f, 1.0);
+    float v = clamp(u_value, 0.0, 1.0);
+    vec3 c = mix(u_track, mix(u_c0, u_c1, f), step(f, v));
+    float tip = (1.0 - smoothstep(0.004, 0.012, abs(f - v))) * step(0.002, v);
+    c = mix(c, vec3(1.0), tip);
+    float tk = u_ticks > 0.5 ? abs(fract(f * u_ticks + 0.5) - 0.5) / u_ticks : 1.0;
+    c = mix(c, vec3(0.0), step(f, 1.0) * (1.0 - step(0.006, tk)) * step(v, f) * 0.7);
+    gl_FragColor = vec4(c, ring * on);
+}`;
+
 /** The map's veil: black over the map's window, clear where the map shows (u_veil: how much, the design's feathered edges). */
 const M340VEIL_FS = `#version 100
 ${HIGHP}
@@ -1964,7 +1994,8 @@ uniform vec2 u_veil_size;
 uniform float u_gain;   /* the design's fade (1) narrowed towards the edges: the map clear over more of the window */
 varying vec2 v_uv;
 void main() {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - clamp(texture2D(u_veil, v_uv).r * max(u_gain, 1.0), 0.0, 1.0));
+    /* (eased: no hard line where the fade begins or ends, the corners as soft as the sides) */
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0 - smoothstep(0.0, 1.0, clamp(texture2D(u_veil, v_uv).r * max(u_gain, 1.0), 0.0, 1.0)));
 }`;
 
-module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, M340IMG_FS, M340VBAR_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };
+module.exports = { HIGHP, COMMON, GLYPH, M340ART_FS, M340SIDE_FS, M340BAR_FS, M340GLYPHS_FS, M340WORDS_FS, M340VEIL_FS, M340TEXT_FS, M340IMG_FS, M340VBAR_FS, M340DIAL_FS, FLAT_FS, PANEL_FS, DIAL_FS, BAND_FS, TEXT_FS, BG_FS, ICON_FS, SPARK_FS, CAR_FS, LEDS_FS, FLAG_FS, EAGLE_FS, FIREWORKS_FS, ROAD_FS, CHEVRON_FS, MDASH_FS, MTACH_FS, SDASH_FS, LICON_FS, E9X_FS, MBAR_FS };
