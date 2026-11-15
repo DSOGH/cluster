@@ -425,8 +425,9 @@ const SIDE_KINDS = {
 };
 /** A reading as a place along a gauge (0..1), from its kind's min (0 by default) to its max. */
 const sideFrac = (K, v) => clamp01(((v || 0) - (K.min || 0)) / (K.max - (K.min || 0)));
-/* the round side gauges (Settings > Side gauge style: Round): in each outer gap, beside the scales' middle */
-const SIDE_D = { left: { cx: 70 }, right: { cx: 1850 }, cy: 452, r: 58 };
+/* the round gauges (Settings > Round gauge, left / right): beside the upright bars, low in each outer gap, between
+ * the bar and the scale's lowest numbers */
+const SIDE_D = { left: { cx: 122 }, right: { cx: 1798 }, cy: 530, r: 53 };
 /** A side gauge's reading: its value (in its unit), as text, and its unit. */
 function sideOf(kind, o) {
     const K = SIDE_KINDS[kind], wheel = o.powerAt === 'wheel', keep = 1 - (Number(o.drivetrainLoss) || 15) / 100;
@@ -441,7 +442,6 @@ function sideReading(kind, o, d) {
     return { value: v, text: v === null ? '--' : SIDE_KINDS[kind].fmt(v), unit: r.unit };
 }
 function sideGauge(side, kind, o) {
-    if ((side === 'left' ? o.styleLeft : o.styleRight) === 'dial') return sideDial(side, kind, o);
     const K = SIDE_KINDS[kind], at = SIDE_G[side], { of, unit } = sideOf(kind, o);
     let lbl = null;
     const label = () => {
@@ -479,8 +479,8 @@ function sideDial(side, kind, o) {
         { key: 'dial_' + side, kind: 'm340dial', x: cx - R, y: SIDE_D.cy - R, w: 2 * R, h: 2 * R,
             params: { u_ticks: [K.ticks], u_track: hexRGB('#151c2a') }, colors: () => ({ c0: K.c[0], c1: K.c[1] }),
             value: (d) => sideFrac(K, of(d)), max: 1, glide: true },
-        ...line('dialVal_' + side, 'small', { x: cx, base: SIDE_D.cy + 8 }, 'middle', 100, (d) => { const v = of(d); return v === null ? '' : K.fmt(v); }, 'fg'),
-        { key: 'dialUnit_' + side, kind: 'm340text', x: cx - 48, y: SIDE_D.cy + 20, w: 96, h: 24, live: { name: 'u_text', w: 96, h: 24, draw: label },
+        ...line('dialVal_' + side, 'small', { x: cx, base: SIDE_D.cy + 7 }, 'middle', 84, (d) => { const v = of(d); return v === null ? '' : K.fmt(v); }, 'fg'),
+        { key: 'dialUnit_' + side, kind: 'm340text', x: cx - 48, y: SIDE_D.cy + 14, w: 96, h: 24, live: { name: 'u_text', w: 96, h: 24, draw: label },
             colors: (t) => ({ color: [t.dim, 1] }) },
     ];
 }
@@ -580,6 +580,9 @@ module.exports = {
         // the side gauges (Settings > Side gauges)
         if (o.sideLeft && o.sideLeft !== 'off' && SIDE_KINDS[o.sideLeft]) list.push(...sideGauge('left', o.sideLeft, o));
         if (o.sideRight && o.sideRight !== 'off' && SIDE_KINDS[o.sideRight]) list.push(...sideGauge('right', o.sideRight, o));
+        // the round gauges beside them (Settings > Round gauge, left / right)
+        if (o.dialLeft && o.dialLeft !== 'off' && SIDE_KINDS[o.dialLeft]) list.push(...sideDial('left', o.dialLeft, o));
+        if (o.dialRight && o.dialRight !== 'off' && SIDE_KINDS[o.dialRight]) list.push(...sideDial('right', o.dialRight, o));
         if (stock) return list.filter((p) => p.kind === 'flat' || p.x + p.w <= 566 || p.x >= 1104);
         return list;
     },

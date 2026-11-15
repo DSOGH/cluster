@@ -94,7 +94,7 @@ mgu.run({
             directions: settings.get('directions') === 'off' ? 'off' : 'on',   // (M340i Sport: the next turn at the top of the centre)
             // (M340i Sport: the side gauges, and where their power and torque are taken)
             sideLeft: settings.get('sideLeft') || 'off', sideRight: settings.get('sideRight') || 'off',
-            styleLeft: settings.get('styleLeft') === 'dial' ? 'dial' : 'bar', styleRight: settings.get('styleRight') === 'dial' ? 'dial' : 'bar',
+            dialLeft: settings.get('dialLeft') || 'off', dialRight: settings.get('dialRight') || 'off',
             powerAt: settings.get('powerAt') === 'wheel' ? 'wheel' : 'crank', drivetrainLoss: Number(settings.get('drivetrainLoss')) || 15,
             vehicle: D.vehicle().vehicle,      // set, or found from the car (Auto)
         });
@@ -163,7 +163,7 @@ mgu.run({
         settings.onChange((k) => {
             if (k === 'look' || k === 'background') return cluster.recolour();
             if (k === 'layout') layout = byId(settings.get('layout'));
-            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'sideLeft', 'sideRight', 'styleLeft', 'styleRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
+            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'sideLeft', 'sideRight', 'dialLeft', 'dialRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
         });
 
         /* ---------- the car's range and charge signals, from its own catalog ---------- */
@@ -182,29 +182,37 @@ mgu.run({
          * now (or a sample while parked), the warnings and the 0-60 best below */
         function widgetsPage(cv, t) {
             const d = data(), o = options(), L = require('./layout_m340');
-            cv.text('Side gauges   ·   Settings > Side gauge, left / right', 48, 70, 26, t.text, { font: 'bold', literal: true });
+            cv.text('Side gauges   ·   Settings > Upright gauge and Round gauge, left / right', 48, 60, 24, t.text, { font: 'bold', literal: true });
             const sample = !(isNum(d.rpm) && d.rpm > 300);
+            if (sample) cv.text('(sample readings: the engine is off)', 48, 92, 18, t.dim, { font: 'label', literal: true });
             const dd = sample ? Object.assign({}, d, { rpm: 4800, torque: 480, boostActual: 1.05, oil: 105, coolant: 95, gLong: 0.4, gLat: 0.3, speed: 96 }) : d;
-            ['left', 'right'].forEach((side, i) => {
-                const kind = o['side' + (side === 'left' ? 'Left' : 'Right')], x = 120 + i * 560;
-                cv.text(side === 'left' ? 'Left' : 'Right', x, 130, 22, t.dim, { font: 'bold', literal: true });
-                if (!kind || kind === 'off') { cv.text('Off', x, 170, 30, t.dim, { font: 'bold', literal: true }); return; }
-                const r = L.sideReading(kind, o, dd), K = L.SIDE_KINDS[kind];
-                const f = Math.max(0, Math.min(1, ((r.value || 0) - (K.min || 0)) / (K.max - (K.min || 0)))), bx = x, by = 150, bw = 44, bh = 300;
-                if (o['style' + (side === 'left' ? 'Left' : 'Right')] === 'dial') {
-                    // the dial: its ring from the lower left clockwise, lit to the reading
-                    const cx = bx + 22, cy = by + 150, R = 70;
-                    cv.arc(cx, cy, R - 14, R, 225, 495, '#151c2a');
-                    if (f > 0) cv.arc(cx, cy, R - 14, R, 225, 225 + 270 * f, K.c[1]);
-                } else {
-                    cv.roundRect(bx, by, bw, bh, bw / 2, '#151c2a');
-                    if (f > 0) cv.roundRect(bx, by + bh * (1 - f), bw, bh * f, bw / 2, K.c[1]);
-                    cv.fillRect(bx, by + bh * (1 - f), bw, 3, '#ffffff');
-                }
-                cv.text(r.text, bx + 80, by + 120, 64, t.text, { font: 'bold', literal: true });
-                cv.text(r.unit + (sample ? '   (a sample: the engine is off)' : ''), bx + 84, by + 160, 22, t.dim, { font: 'bold', literal: true });
-                cv.text({ boost: 'Boost over the air outside', hp: 'Horsepower from torque and revs', torque: 'Torque, the engine\'s reading', oil: 'Oil temperature', coolant: 'Coolant temperature', gforce: 'G-force, braking, cornering and accelerating together', speedkmh: 'Speed in km/h' }[kind]
-                    + (kind !== 'boost' ? (o.powerAt === 'wheel' ? ', at the wheels (less ' + o.drivetrainLoss + ' %)' : ', at the crank') : ''), bx + 84, by + 196, 18, t.dim, { font: 'label', literal: true });
+            const NAMES = { boost: 'Boost', hp: 'Horsepower', torque: 'Torque', oil: 'Oil temperature', coolant: 'Coolant temperature', gforce: 'G-force', speedkmh: 'Speed in km/h' };
+            /* each side as on the cluster: the upright gauge at the outer edge, the round one beside it */
+            [['left', 'Left', 60], ['right', 'Right', 840]].forEach(([side, Side, x0]) => {
+                cv.text(Side, x0, 136, 22, t.dim, { font: 'bold', literal: true });
+                const bar = o['side' + Side], dial = o['dial' + Side];
+                const one = (kind, x, round) => {
+                    if (!kind || kind === 'off') { cv.text((round ? 'Round' : 'Upright') + ': off', x, 300, 22, t.dim, { font: 'bold', literal: true }); return; }
+                    const r = L.sideReading(kind, o, dd), K = L.SIDE_KINDS[kind];
+                    const f = Math.max(0, Math.min(1, ((r.value || 0) - (K.min || 0)) / (K.max - (K.min || 0))));
+                    if (round) {
+                        const cx = x + 80, cy = 300, R = 80;
+                        cv.arc(cx, cy, R - 16, R, 225, 495, '#151c2a');
+                        if (f > 0) cv.arc(cx, cy, R - 16, R, 225, 225 + 270 * f, K.c[1]);
+                        cv.text(r.text, cx, cy + 12, 36, t.text, { font: 'bold', literal: true, align: 'center' });
+                        cv.text(r.unit, cx, cy + 40, 16, t.dim, { font: 'bold', literal: true, align: 'center' });
+                    } else {
+                        const by = 170, bw = 40, bh = 280;
+                        cv.roundRect(x, by, bw, bh, bw / 2, '#151c2a');
+                        if (f > 0) cv.roundRect(x, by + bh * (1 - f), bw, bh * f, bw / 2, K.c[1]);
+                        cv.fillRect(x, by + bh * (1 - f), bw, 3, '#ffffff');
+                        cv.text(r.text, x + bw / 2, by - 12, 26, t.text, { font: 'bold', literal: true, align: 'center' });
+                        cv.text(r.unit, x + bw / 2, by + bh + 24, 16, t.dim, { font: 'bold', literal: true, align: 'center' });
+                    }
+                    cv.text(NAMES[kind] + (kind === 'hp' || kind === 'torque' ? (o.powerAt === 'wheel' ? ' (wheels, less ' + o.drivetrainLoss + ' %)' : ' (crank)') : ''), round ? x + 10 : x - 10, 440, 16, t.dim, { font: 'label', literal: true });
+                };
+                // (the left side's upright gauge at its outer edge, then the round one; the right side mirrored)
+                if (side === 'left') { one(bar, x0, false); one(dial, x0 + 110, true); } else { one(dial, x0 + 380, true); one(bar, x0 + 640, false); }
             });
             cv.text('Warnings: ' + (D.status().warnings || '-'), 48, 490, 16, t.dim, { font: 'label', literal: true });
             return cv;

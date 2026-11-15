@@ -22,9 +22,9 @@ check('warnings: active ones named from the cluster\'s list, newest first, gone 
     w.basic([{ ccmId: 77, activeState: 'PASSIV' }]);
     assert.strictEqual(w.list().length, 2);
 });
-check('side gauges: each kind, bar or dial, clear of the corners, the eDrive box and the readings, in both centres', () => {
+check('side gauges: each kind, the bars alone or with the round ones beside them (four at once), clear of the corners, the eDrive box and the readings, in both centres', () => {
     Object.keys(L.SIDE_KINDS).forEach((k) => ['info', 'map'].forEach((centre) => ['bar', 'dial'].forEach((style) => {
-        const o = O({ centre, sideLeft: k, sideRight: k, styleLeft: style, styleRight: style });
+        const o = O(style === 'bar' ? { centre, sideLeft: k, sideRight: k } : { centre, sideLeft: k, sideRight: k, dialLeft: k, dialRight: k });
         const bad = L.pieces(o).map((p) => [p.key, clashes(p, o)]).filter(([, c]) => c.length);
         assert(!bad.length, JSON.stringify(bad));
         assert(L.pieces(o).length <= 60);

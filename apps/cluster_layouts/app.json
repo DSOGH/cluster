@@ -2,7 +2,7 @@
   "id": "cluster_layouts",
   "title": "Cluster Layouts",
   "description": "Your own layout on the whole instrument cluster (round dials, gear, temperatures), drawn by the cluster itself",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "startType": "autostart",
   "vendor": "custom",
   "loggingId": "OA9L",
@@ -489,7 +489,7 @@
     },
     {
       "key": "sideLeft",
-      "label": "Side gauge, left (M340i Sport)",
+      "label": "Upright gauge, left (M340i Sport)",
       "type": "choice",
       "default": "off",
       "options": [
@@ -529,7 +529,7 @@
     },
     {
       "key": "sideRight",
-      "label": "Side gauge, right (M340i Sport)",
+      "label": "Upright gauge, right (M340i Sport)",
       "type": "choice",
       "default": "off",
       "options": [
@@ -568,34 +568,82 @@
       ]
     },
     {
-      "key": "styleLeft",
-      "label": "Side gauge style, left",
+      "key": "dialLeft",
+      "label": "Round gauge, left (M340i Sport)",
       "type": "choice",
-      "default": "bar",
+      "default": "off",
       "options": [
         [
-          "bar",
-          "Upright bar"
+          "off",
+          "Off"
         ],
         [
-          "dial",
-          "Round dial"
+          "boost",
+          "Boost (psi)"
+        ],
+        [
+          "hp",
+          "Horsepower"
+        ],
+        [
+          "torque",
+          "Torque (lb-ft)"
+        ],
+        [
+          "oil",
+          "Oil temperature"
+        ],
+        [
+          "coolant",
+          "Coolant temperature"
+        ],
+        [
+          "gforce",
+          "G-force"
+        ],
+        [
+          "speedkmh",
+          "Speed in km/h"
         ]
       ]
     },
     {
-      "key": "styleRight",
-      "label": "Side gauge style, right",
+      "key": "dialRight",
+      "label": "Round gauge, right (M340i Sport)",
       "type": "choice",
-      "default": "bar",
+      "default": "off",
       "options": [
         [
-          "bar",
-          "Upright bar"
+          "off",
+          "Off"
         ],
         [
-          "dial",
-          "Round dial"
+          "boost",
+          "Boost (psi)"
+        ],
+        [
+          "hp",
+          "Horsepower"
+        ],
+        [
+          "torque",
+          "Torque (lb-ft)"
+        ],
+        [
+          "oil",
+          "Oil temperature"
+        ],
+        [
+          "coolant",
+          "Coolant temperature"
+        ],
+        [
+          "gforce",
+          "G-force"
+        ],
+        [
+          "speedkmh",
+          "Speed in km/h"
         ]
       ]
     },
