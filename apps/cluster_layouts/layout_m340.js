@@ -210,8 +210,8 @@ function line(key, set, at, align, room, say, colour, o) {
  * from when the song changed: the car gives no position or length). The two text lines are drawn on the head unit
  * in the kit's fonts (any script) and sent as pictures when the song changes ('m340text', live).
  */
-/* the song: the title over the artist (Pirulen, baked for the head unit's canvas: pir), as one picture drawn on the
- * head unit at each change of song, centred on the display, low in the centre panel; over the map, along the bottom
+/* the song: the title over the artist (Pirulen, baked for the head unit's canvas: pir), with its cover art when one
+ * is found (Settings > Cover art), as one picture drawn on the head unit at each change, centred on the display, low in the centre panel; over the map, along the bottom
  * edge of its window, where the map has faded out */
 const NP = { x: 560, y: 488, w: 800, h: 64, title: 24, sub: 16 };
 const NP_MAP = { x: 610, y: 560, w: 700, h: 46, title: 18, sub: 13 };
@@ -335,16 +335,38 @@ function zeroSixtyPiece(z) {
     return { key: 'zeroSixty', kind: 'm340text', x: DIR.x, y: DIR.y, w: DIR.w, h: DIR.h, live: { name: 'u_text', w: DIR.w, h: DIR.h, draw },
         colors: (t) => ({ color: [t.fg, 1] }), visible: (d) => !!d.zeroSixty && !d.nav, z, overMap: true, topMiddle: true };
 }
-/** The song card as RGBA w x h: the title over the artist (and album), each line centred. */
+/** The song card as RGBA w x h: the title over the artist (and album), the whole centred across; with the cover art
+ * (d.media.art: 128 x 128 RGBA, cover.js) at the left of the lines, scaled to the card's height, its corners rounded. */
 function cardPx(m, c) {
     if (!Canvas) Canvas = require('./kit/canvas').Canvas;
-    const cv = new Canvas(c.w, c.h), f = { font: 'pir', literal: true, align: 'center' }, room = c.w - 8;
+    const cv = new Canvas(c.w, c.h), f = { font: 'pir', literal: true }, art = m.art && m.art.px ? c.h - 4 : 0, gap = art ? Math.round(c.h * 0.22) : 0;
     const title = m.title || m.artist || '', sub = m.title ? [m.artist, m.album].filter(Boolean).join('  ·  ') : m.album || '';
+    const room = c.w - 8 - art - gap;
     const fit = (str, size) => { let x = String(str); if (cv.textWidth(x, size, f) <= room) return x; while (x.length > 1 && cv.textWidth(x + '...', size, f) > room) x = x.slice(0, -1); return x.replace(/\s+$/, '') + '...'; };
-    if (sub) {
-        cv.text(fit(title, c.title), c.w / 2, Math.round(c.h * 0.48), c.title, '#ffffff', f);
-        cv.text(fit(sub, c.sub), c.w / 2, Math.round(c.h * 0.9), c.sub, '#a2abbb', f);
-    } else cv.text(fit(title, c.title), c.w / 2, Math.round(c.h / 2 + c.title * 0.36), c.title, '#ffffff', f);
+    const t = fit(title, c.title), u = sub ? fit(sub, c.sub) : '';
+    const tw = Math.max(cv.textWidth(t, c.title, f), u ? cv.textWidth(u, c.sub, f) : 0);
+    const x0 = Math.round((c.w - (art + gap + tw)) / 2);
+    if (art) {
+        // the cover, from 128 (box filter) into place, corners rounded
+        const src = m.art.px, k = 128 / art, rad = art * 0.12, ay = Math.round((c.h - art) / 2);
+        for (let y = 0; y < art; y++) for (let x = 0; x < art; x++) {
+            const dx = Math.max(0, Math.abs(x + 0.5 - art / 2) - (art / 2 - rad)), dy = Math.max(0, Math.abs(y + 0.5 - art / 2) - (art / 2 - rad));
+            const cover = Math.max(0, Math.min(1, rad + 0.5 - Math.hypot(dx, dy)));
+            if (!cover) continue;
+            let r = 0, g = 0, b = 0, n = 0;
+            for (let sy = Math.floor(y * k); sy < Math.max(Math.floor(y * k) + 1, Math.floor((y + 1) * k)); sy++) for (let sx = Math.floor(x * k); sx < Math.max(Math.floor(x * k) + 1, Math.floor((x + 1) * k)); sx++) {
+                const i = (sy * 128 + sx) * 4; r += src[i]; g += src[i + 1]; b += src[i + 2]; n++;
+            }
+            const o = ((ay + y) * c.w + x0 + x) * 4;
+            cv.d[o] = r / n; cv.d[o + 1] = g / n; cv.d[o + 2] = b / n; cv.d[o + 3] = Math.round(255 * cover);
+        }
+    }
+    // the lines: centred on the card without a cover, from the cover's right with one
+    const tx = art ? x0 + art + gap : c.w / 2, al = Object.assign({ align: art ? 'left' : 'center' }, f);
+    if (u) {
+        cv.text(t, tx, Math.round(c.h * 0.48), c.title, '#ffffff', al);
+        cv.text(u, tx, Math.round(c.h * 0.9), c.sub, '#a2abbb', al);
+    } else cv.text(t, tx, Math.round(c.h / 2 + c.title * 0.36), c.title, '#ffffff', al);
     return Buffer.from(cv.d);
 }
 /** The song: the card (one RGBA picture, drawn again when the song changes). Hidden while a warning shows (it stands
@@ -354,7 +376,7 @@ function nowPlaying(at) {
     const draw = (d) => {
         const m = d.media;
         if (!m) return null;
-        const key = [m.title, m.artist, m.album].join('|');
+        const key = [m.title, m.artist, m.album, m.art ? m.art.key : ''].join('|');
         if (!last || last.key !== key) last = { key, px: cardPx(m, at) };
         return last;
     };

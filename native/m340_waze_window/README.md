@@ -12,6 +12,10 @@ another centre, the map goes back to its own place on the stock cluster.
   -s map_rect=X,Y,W,H` added to its start command, or none) and restarts it. The map comes back a few seconds
   after each switch. `/run` is empty at each start of the head unit, so Waze on cluster always starts in its own
   place.
+- The cover art: when Cluster Layouts asks (`cover_request.json` in `/dev/shm/cluster-info`, at each change of
+  song, Settings > Cover art), `watch.js` looks through the whole unit for JPEG and PNG files written since a
+  little before the change and copies the newest few there as `cover0.img` ... with `cover.json` (their sources);
+  the app decodes them and takes the first that is a cover.
 - `hook.js`: on removal, stops the service, takes the drop-in out and puts the map back in its own place.
 
 The layout puts every piece not meant to show over the map below z 0 while its centre is Waze, so the map (z 0 on

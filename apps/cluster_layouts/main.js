@@ -57,7 +57,7 @@ mgu.run({
         const showing = () => settings.get('show') === 'on';
         // every reading (data.js, shared with Cluster Centre): the car's signals, the engine unit over UDS for
         // what a layout needs (layout.needs), eDrive Live's charge and power while shown
-        const D = startData(ctx, { shown: showing, tyres: true, media: true, directions: true, warnings: true });
+        const D = startData(ctx, { shown: showing, tyres: true, media: true, directions: true, warnings: true, cover: true });
         const car = D.car;
         // the driving assistant (dap.js), for the layouts that show it (layout.dap: Modern wide's road, Sport's
         // cruise control): subscribed once one is first shown
@@ -163,7 +163,7 @@ mgu.run({
         settings.onChange((k) => {
             if (k === 'look' || k === 'background') return cluster.recolour();
             if (k === 'layout') layout = byId(settings.get('layout'));
-            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'sideLeft', 'sideRight', 'dialLeft', 'dialRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
+            if (['layout', 'centre', 'speedUnit', 'tempUnit', 'torqueUnit', 'redline', 'rpmMax', 'boxClear', 'boxBezel', 'cluster', 'bottomStrip', 'vehicle', 'tankLitres', 'nowPlaying', 'directions', 'coverArt', 'sideLeft', 'sideRight', 'dialLeft', 'dialRight', 'powerAt', 'drivetrainLoss'].indexOf(k) >= 0) cluster.rebuild();
         });
 
         /* ---------- the car's range and charge signals, from its own catalog ---------- */
@@ -339,6 +339,8 @@ mgu.run({
                     + '   ·   album "' + ((m && m.album) || '') + '"', 48, y + 24, 18, t.text, { font: 'bold', literal: true });
                 // the directions (shared/directions.js): whether a route runs, each source, the turns' replies
                 cv.text('Directions: ' + (D.status().directions || '-'), 48, y + 56, 16, t.dim, { font: 'label', literal: true });
+                // the cover art (shared/cover.js): where it came from, or why none
+                cv.text('Cover art: ' + String(D.status().cover || '-').slice(0, 150), 48, y + 80, 16, t.dim, { font: 'label', literal: true });
                 return ui.image('MAIN_GFX', cv);
             }
             if (page === 4) return ui.image('MAIN_GFX', widgetsPage(cv, t));

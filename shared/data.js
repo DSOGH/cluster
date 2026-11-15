@@ -31,6 +31,7 @@ const Awake = require('./kit/awake');
 const Media = require('./media');
 const Directions = require('./directions');
 const Warnings = require('./warnings');
+const Cover = require('./cover');
 
 const READY_MS = 1000;
 const ZS_KMH = 60 * 1.609344, ZS_MAX_MS = 25000, ZS_SHOW_MS = 12000;   // 0-60 mph (d.zeroSixty)   // the engine off and the car standing this long: READY (d.ready)
@@ -326,12 +327,15 @@ function startData(ctx, opts) {
      * declares the interface; the runtime spec on the car does not carry the declarations):
      * the centre screen's instance, each field's raw value kept for the Signals screen */
     const media = opts.media ? Media.createMedia() : null;
+    // the song's cover art (cover.js: online, or the head unit's own copy; Settings > Cover art)
+    const cover = media && opts.cover ? Cover.startCover({ dataDir: ctx.dataDir, log, mode: () => setting('coverArt') || 'both' }) : null;
     if (media) {
         // (each change of what is read logged, with where each part came from: the log shows why a title is missing)
         let said = null;
         const put = (k, name) => (v) => {
             fes(name)(v); media.put(k, v);
             const n = media.now();
+            if (cover) cover.song(n ? n.title : '', n ? n.artist : '');
             const line = n ? 'title "' + n.title + '" (' + (n.from.title || 'none') + '), artist "' + n.artist + '" (' + (n.from.artist || 'none') + ')' : 'nothing playing';
             // (the values themselves too, shortened: what the player sends)
             if (line !== said) { said = line; log.info('media: ' + line + ' [' + name + ' ' + (v && typeof v === 'object' ? JSON.stringify(v).slice(0, 600) : String(v)) + ']'); }
@@ -535,6 +539,7 @@ function startData(ctx, opts) {
             o.media = d.demo ? DEMO_SONG(tNow) : media ? media.now() : null;
             // the next turn (directions.js): { kind, dir, exit, dist, unit, road, ... } or null
             o.nav = d.demo ? null : directions ? directions.now() : null;
+            if (o.media && cover && !d.demo) o.media.art = cover.now();
             o.warnings = d.demo || !warnings ? [] : warnings.list();
             // the cruise control: on with a set speed (the head-up display's), off at 0
             if (!d.demo && Date.now() - (x.at.cruiseSet || 0) < 10000) o.cruise = { on: x.cruiseSet > 0 && x.cruiseSet < 250, set: x.cruiseSet > 0 && x.cruiseSet < 250 ? x.cruiseSet : undefined };
@@ -542,7 +547,7 @@ function startData(ctx, opts) {
         },
         /** The page on screen needs these (data keys): read them fast. */
         want(keys) { wanted = keys.map((k) => (k === 'boostTarget' || k === 'boostActual' ? 'boostCtl' : k === 'gearbox' ? 'egs' : k)); wantedT = Date.now(); },
-        status: () => Object.assign({ warnings: warnings ? warnings.status() : 'not asked', directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
+        status: () => Object.assign({ cover: cover ? cover.status() : 'not asked', warnings: warnings ? warnings.status() : 'not asked', directions: directions ? directions.status() : 'not declared', car: awake.why() + (awake.on() ? '' : ' - nothing asked of the car'), diag: link.available ? 'up' : 'down', providers: providers.list().join(', ') || 'none', raw, kwFit: fuse.fit() }, status),
         /** The vehicle in use: { vehicle 'phev' | 'ice', how: 'set' | 'found' | 'assumed', why }. */
         vehicle: () => ({ vehicle: vehicleNow(), how: setting('vehicle') === 'ice' || setting('vehicle') === 'phev' ? 'set' : detected.vehicle ? 'found' : 'assumed', why: detected.why }),
         /** fn() on each new reading (the car's speed and rpm samples, every changed reading). */
