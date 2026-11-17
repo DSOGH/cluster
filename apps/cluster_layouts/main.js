@@ -21,6 +21,7 @@ const clock = require('./clock');
 const mgu = require('./kit/mgu');
 const { ClusterRender } = require('./cluster_render_client');
 const { startCluster, STALE_MS } = require('./engine');
+const DATA_MEMO_MS = 10;   // (the car's data worked out at most once in this long, unless a reading came)
 const { byId } = require('./layouts');
 const { lookNow } = require('./themes');
 const { startData } = require('./data');
@@ -63,12 +64,20 @@ mgu.run({
         // cruise control): subscribed once one is first shown
         let dap = null;
         const dapWanted = () => showing() && !!byId(settings.get('layout')).dap;
+        // (worked out once an update: the engine, the colours and the page all ask within the same moment, and each
+        // working-out goes over every reading)
+        let dMemo = null, dMemoAt = -1;
         const data = () => {
+            const now = Date.now();
+            if (dMemo && now - dMemoAt < DATA_MEMO_MS) return dMemo;
             const d = D.data();
             if (!dap && dapWanted() && !d.demo) dap = startDap(ctx, log);
             d.dap = d.demo ? DAP_DEMO : dap ? dap.state() : null;
+            dMemo = d; dMemoAt = now;
             return d;
         };
+        // a new reading: the next ask works it out again
+        D.onFresh(() => { dMemo = null; });
         /* the Waze centre only while Waze on cluster shows its map (its /run/waze-on-cluster/status.json, written each
          * second: state 'showing'); otherwise the layout's own centre (the M colours), never the stock cluster's map
          * screen behind an empty window. A change counts once held WAZE_ON_MS (on) or WAZE_OFF_MS (off). */
@@ -133,6 +142,22 @@ mgu.run({
         let cluster = start();
         const mapWindow = startMapWindow(log);
         let lastVehicle = null, lastModeGear = null;
+        /* this app's own work for the Task Manager (layouts_perf.json in the folder every app shares): the updates a
+         * second and their time, the messages sent to the renderer and its round trips, every PERF_FILE_MS */
+        const PERF_DIR = process.env.CLUSTER_INFO_DIR || '/dev/shm/cluster-info', PERF_FILE_MS = 2000;
+        let perfAt = Date.now();
+        const perfTimer = setInterval(() => {
+            const now = Date.now(), secs = Math.max(0.001, (now - perfAt) / 1000), st = cluster.takeStats ? cluster.takeStats() : null;
+            perfAt = now;
+            if (!st) return;
+            const out = { app: 'cluster_layouts', at: now, layout: layout.id, shown: st.shown, layers: st.layers, updatesPerS: Math.round(st.updates / secs), avgMs: st.avgMs, maxMs: st.maxMs,
+                msgsPerS: Math.round((st.rtt.msgs || 0) / secs), kbPerS: Math.round((st.rtt.bytes || 0) / secs / 1024 * 10) / 10, rttMs: st.rtt.avg || 0, rttMaxMs: st.rtt.max || 0, rttOn: !!st.rtt.echo };
+            try {
+                const fs = require('fs'), f = require('path').join(PERF_DIR, 'layouts_perf.json');
+                fs.writeFileSync(f + '.tmp', JSON.stringify(out)); fs.renameSync(f + '.tmp', f);
+            } catch (e) { /* no shared folder yet */ }
+        }, PERF_FILE_MS);
+        if (perfTimer.unref) perfTimer.unref();
         // the engine-unit readings the layout shows, read fast while it shows
         setInterval(() => {
             // (a boost gauge: the engine unit's own boost, read by diagnostics; the sport display's figure only moves while

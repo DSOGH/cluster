@@ -10,7 +10,7 @@
 
 # iDrive 7 cluster apps
 
-Three apps for the BMW iDrive 7 head unit (MGU), by eroobeeroo. **They are free: if you paid for one, ask for a
+Four apps (and a tool) for the BMW iDrive 7 head unit (MGU), by eroobeeroo. **They are free: if you paid for one, ask for a
 refund.**
 
 | App | What it does |
@@ -18,6 +18,7 @@ refund.**
 | **[Cluster Info](#cluster-info)** | a small panel of live values over the Waze map in the cluster or on the HUD, and turn signal arrows on the HUD |
 | **[Cluster Layouts](apps/cluster_layouts/README.md)** | your own layout on the whole instrument cluster, drawn by the cluster itself: eight layouts, each in three colour sets and with three centres (readings, Waze over the layout, stock) |
 | **[Cluster Centre](apps/cluster_centre/README.md)** | the factory cluster kept, its centre taken over by pages of live data (temperatures, fuel and boost, warm-up, turbo cool-down, eDrive, a 0-60 timer, custom pages) |
+| **[Task Manager](apps/task_manager/README.md)** | what the head unit is doing: CPU, memory and GPU graphs, every process and Store app by what it takes, what is slowing it down, and whether the cluster keeps up |
 
 ![Cluster Layouts: Analog sport](docs/analog_sport.png)
 
@@ -67,9 +68,10 @@ the map there. What it shows, its settings and how other apps can give it values
 | Path | What |
 |---|---|
 | `apps/cluster_info/` | Cluster Info: `main.js` (its page), `overlay.js` (the panel over the map), `providers.js` (values from other apps), `indicators.js` (turn signals and day / night), `cluster_render_client.js` (the cluster renderer's protocol), `app.json` (manifest, signals and settings) |
-| `apps/cluster_layouts/`, `apps/cluster_centre/` | the other two apps; each holds its own copy of the shared files it uses |
+| `apps/cluster_layouts/`, `apps/cluster_centre/` | the other two cluster apps; each holds its own copy of the shared files it uses |
+| `apps/task_manager/` | Task Manager: `sysmon.js` (the head unit's figures from /proc and /sys), `main.js` (its four pages) |
 | `shared/` | the code those two share (the cluster engine and shaders, car data, fonts, the clock, logs, the signed credit); `node tools/sync_shared.js` copies it into each app |
-| `tools/` | their tests, the cluster previews (`preview.js`, `preview_centre.js`), the font baker and the credit signer |
+| `tools/` | their tests, the cluster previews (`preview.js`, `preview_centre.js`), `bench_app.js` (what Cluster Layouts costs while driving, each layout), the font baker and the credit signer |
 | `kit/runtime/` | the app kit's runtime the build bundles into each app (canvas, fonts, gauges, themes, settings, the controller and renderer clients) |
 | `kit/platform/`, `kit/localization/` | the packages' permissions and the Chinese build's credit |
 | `kit/tools/build.py` | builds an app package (with `pack_data.py`, `localize.py`, `make_icon.js`, `oapgen/`) |
@@ -84,7 +86,10 @@ The tests need Node.js only (no SDK, renderer or car):
 node kit/tools/test_runtime.js
 node kit/tools/test_cluster_info_overlay.js
 node kit/tools/test_cluster_info.js
-for t in engine app centre data finder logs providers shared signals; do node tools/test_$t.js; done
+node kit/tools/test_flex_fuel.js
+node kit/tools/test_task_manager.js
+for t in engine app centre data finder logs providers shared signals media waze_window directions m340_extras cover; do node tools/test_$t.js; done
+node tools/bench_app.js          # updates, messages and CPU a second for each layout while driving
 ```
 
 After changing anything in `shared/`, run `node tools/sync_shared.js`. `python3 kit/tools/build.py <app id>` builds a

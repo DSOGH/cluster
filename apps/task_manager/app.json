@@ -1,0 +1,105 @@
+{
+  "id": "task_manager",
+  "title": "Task Manager",
+  "description": "What the head unit is doing: CPU, memory and GPU graphs, every process and Store app by what it takes, what is slowing it down, and how the cluster's pipeline keeps up (Cluster Layouts, the cluster renderer, Waze on cluster)",
+  "version": "1.0.0",
+  "startType": "autostart",
+  "vendor": "custom",
+  "loggingId": "OA9T",
+  "iconGlyph": "tasks",
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "canvas",
+      "title": "Task Manager",
+      "buttons": [
+        [
+          "BTN_NEXT",
+          "Next"
+        ],
+        [
+          "BTN_SORT",
+          "Sort"
+        ],
+        [
+          "BTN_SETTINGS",
+          "Settings"
+        ]
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "refresh",
+      "label": "Refresh every",
+      "type": "choice",
+      "default": 2,
+      "options": [
+        [
+          1,
+          "1 second"
+        ],
+        [
+          2,
+          "2 seconds"
+        ],
+        [
+          5,
+          "5 seconds"
+        ]
+      ]
+    },
+    {
+      "key": "sortBy",
+      "label": "Sort processes by",
+      "type": "choice",
+      "default": "cpu",
+      "options": [
+        [
+          "cpu",
+          "CPU"
+        ],
+        [
+          "mem",
+          "Memory"
+        ]
+      ]
+    },
+    {
+      "key": "cpuScale",
+      "label": "CPU percentages",
+      "type": "choice",
+      "default": "all",
+      "options": [
+        [
+          "all",
+          "Share of all cores"
+        ],
+        [
+          "core",
+          "100 % = one core (as top)"
+        ]
+      ]
+    },
+    {
+      "key": "watchClosed",
+      "label": "Watch the processes while closed",
+      "type": "choice",
+      "default": "on",
+      "options": [
+        [
+          "on",
+          "On (every 10 s)"
+        ],
+        [
+          "off",
+          "Off"
+        ]
+      ]
+    }
+  ],
+  "requires": {
+    "idrive7-renderd": "2.1.7",
+    "mgu-inputgate": "1.0.0"
+  }
+}

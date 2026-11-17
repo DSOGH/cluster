@@ -74,4 +74,23 @@ check('the renderer backed up: only the newest of each value waits, sent in orde
     assert.strictEqual(sent.length, 3);
     assert(/"v":"0.9"/.test(sent[1]) && /50:0.9/.test(sent[2]), sent.slice(1).join(' | '));
 });
+check('a renderer that reads late (busy with the Waze video): values wait for its answer to the marker, only the newest goes (no queue in the socket)', () => {
+    const { ClusterRender } = require('../shared/cluster_render_client');
+    const cr = new ClusterRender('t'), sent = [];
+    cr.sock = { write: (m) => { sent.push(String(m)); return true; } };
+    cr.connected = true; cr.ready = true; cr.sync = { out: false, at: 0, echo: true };
+    cr.layers.set(1, { kind: 'effect', uniforms: {}, anims: new Map(), nextAnim: 1 });
+    cr.uniform(1, 'u_value', [0.1]);
+    assert.strictEqual(sent.length, 2); assert(/x_sync/.test(sent[1]), 'the marker after the value');
+    cr.sync.at -= 200;   // (no answer for 200 ms: the renderer is behind)
+    for (let i = 2; i <= 40; i++) cr.uniform(1, 'u_value', [i / 100]);
+    assert.strictEqual(sent.length, 2, 'nothing more while it is behind');
+    assert(cr.lag() >= 200);
+    cr._event({ ev: 'error', op: 'x_sync', ref: 0, reason: 'unknown op' });   // (it caught up)
+    assert.strictEqual(sent.length, 4);
+    assert(/"v":"0.4"/.test(sent[2]) && /x_sync/.test(sent[3]), sent.slice(2).join(' | '));
+    let refused = 0; cr.on('refused', () => refused++);
+    cr._event({ ev: 'error', op: 'x_sync', ref: 0, reason: 'unknown op' });
+    assert.strictEqual(refused, 0, 'the marker\'s answer is not a refusal');
+});
 console.log(ok + ' passed');

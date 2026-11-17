@@ -127,6 +127,13 @@ if (glyph === 'gauge') {
     c.polyline([[74, 40], [96, 40], [104, 52], [104, 92], [96, 100]], 5, W);
     c.circle(112, 104, 16, A);
     c.circle(112, 104, 9, B);
+} else if (glyph === 'tasks') {
+    // a monitor's frame with a load graph in it: white line, its peak in red, a blue baseline
+    c.strokeRoundRect(12, 18, 116, 88, 12, 6, W);
+    c.polyline([[24, 82], [42, 82], [52, 62], [62, 74], [74, 38], [86, 70], [98, 56], [116, 56]], 6, W);
+    c.circle(74, 38, 7, A);
+    c.fillRect(24, 92, 92, 4, B);
+    c.fillRect(48, 112, 44, 7, W);
 } else {
     c.strokeRoundRect(14, 14, 112, 112, 22, 6, W);
     c.text(glyph, 70, 88, 56, W, { font: 'bold', align: 'center' });

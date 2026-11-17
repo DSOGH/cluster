@@ -23,7 +23,7 @@ const WINDOW = process.env.MAP_WINDOW_FILE || '/dev/shm/cluster-info/map_window.
 const UNIT = 'waze-on-cluster.service';
 const DROPIN_DIR = '/run/systemd/system/' + UNIT + '.d';
 const DROPIN = path.join(DROPIN_DIR, 'zz-m340-waze-window.conf');
-const FRESH_MS = 15000, ON_MS = 2000, OFF_MS = 20000, GAP_MS = 15000, TICK_MS = 1000;   // (a busy head unit can leave the window file a few seconds old: no restart for that)
+const FRESH_MS = 15000, ON_MS = 2000, OFF_MS = 20000, GAP_MS = 15000, TICK_MS = 1000, CHECK_MS = 30000;   // (a busy head unit can leave the window file a few seconds old: no restart for that)
 const FALLBACK_EXEC = '/var/opt/waze-on-cluster/current/waze-on-cluster -c /var/opt/waze-on-cluster/current/waze-on-cluster.conf $WOC_SRC_CROP';
 const SYSTEMCTL = ['/bin/systemctl', '/usr/bin/systemctl'].find((f) => { try { fs.accessSync(f); return true; } catch (e) { return false; } }) || 'systemctl';
 
@@ -138,17 +138,26 @@ function release() {
 }
 
 function main() {
-    let cand = null, candAt = 0, lastRestart = 0, applied;
+    let cand = null, candAt = 0, lastRestart = 0, applied, settled = null, checkedAt = 0;
     log('started');
     const tick = () => {
         const want = wanted() || '', now = Date.now();
         if (want !== cand) { cand = want; candAt = now; }
         if (now - candAt < (want ? ON_MS : OFF_MS)) return;
-        const run = running();
         if (applied !== want) {
             try { setDropin(want); applied = want; } catch (e) { log('drop-in: ' + e.message); return; }
+            checkedAt = 0;
         }
-        if (run === undefined || run === want || now - lastRestart < GAP_MS) return;
+        // what runs, asked of systemd only when there may be something to do: the wanted place changed, a restart
+        // is due, or every CHECK_MS (each ask starts a systemctl: once a second it cost the head unit for nothing)
+        if (settled === want && now - checkedAt < CHECK_MS) return;
+        checkedAt = now;
+        const run = running();
+        if (run === want) { settled = want; return; }
+        // (not running: nothing to restart; looked at again in 5 s)
+        if (run === undefined) { settled = want; checkedAt = now - CHECK_MS + 5000; return; }
+        settled = null;
+        if (now - lastRestart < GAP_MS) return;
         lastRestart = now;
         log(want ? 'map to the layout\'s window ' + want : 'map back in its own place');
         try { sc(['try-restart', UNIT]); } catch (e) { log('restart: ' + e.message); }

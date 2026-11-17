@@ -50,6 +50,9 @@ const FRAME_T = 0x46;   /* 'F' */
 const MESH_T = 0x4d;    /* 'M' */
 const MAX_DIRTY = 16;
 const BACKOFF_MS = [250, 500, 1000, 2000];
+/* the round-trip marker (_mark): an op no service has, answered by an error event; a value waits while one is out longer
+ * than SYNC_LAG_MS; a service that never answers one is left to the socket after SYNC_GIVE_UP_MS */
+const SYNC_OP = 'x_sync', SYNC_LAG_MS = 50, SYNC_GIVE_UP_MS = 3000;
 const SET_KEYS = ['klass', 'z', 'x', 'y', 'w', 'h', 'visible', 'exclusive', 'prewarm', 'contend', 'opacity',
     'rotate', 'sx', 'sy', 'px', 'py'];
 const MESH_KEYS = ['projection', 'fov', 'ortho_h', 'near', 'far', 'cx', 'cy', 'cz', 'crx', 'cry', 'crz'];
@@ -141,6 +144,7 @@ class ClusterRender extends EventEmitter {
 
     _open() {
         this.latest = null;   // (a new connection replays the layers' uniforms and animations itself)
+        this.sync = { out: false, at: 0, echo: false, since: 0 };
         if (this.closed || this.sock) return;
         const sock = net.connect(this.path);
         this.sock = sock;
@@ -150,6 +154,7 @@ class ClusterRender extends EventEmitter {
         sock.on('connect', () => {
             /* Everything made before now goes in the replay below. */
             this.connected = true;
+            this.sync.since = Date.now();
             this._send({ op: 'hello', app: this.app, proto: PROTO });
             /* Assets first, so binds find them; binds and animations once
              * every layer and part is made. */
@@ -219,6 +224,12 @@ class ClusterRender extends EventEmitter {
             this.emit('target', ev.target, ev.state, ev.holder, ev.reason);
         } else if (ev.ev === 'budget') {
             this.emit('budget', ev.cap_kb_per_s, ev.max_kb_per_s, ev.reason);
+        } else if (ev.ev === 'error' && ev.op === SYNC_OP) {
+            // the renderer has read everything sent before the marker: the newest waiting values go now
+            const rtt = Date.now() - this.sync.at;
+            this.sync.out = false; this.sync.echo = true;
+            this.rtt = { last: rtt, max: Math.max((this.rtt && this.rtt.max) || 0, rtt), n: ((this.rtt && this.rtt.n) || 0) + 1, sum: ((this.rtt && this.rtt.sum) || 0) + rtt };
+            this._flushLatest();
         } else if (ev.ev === 'error') {
             this.emit('refused', ev.op, ev.ref, ev.reason);
         } else if (ev.ev === 'status') {
@@ -233,8 +244,9 @@ class ClusterRender extends EventEmitter {
      * newest readings, never a queue of old ones played seconds late. */
     _sendLatest(key, obj) {
         if (!this.sock || !this.connected) return;
-        if (this.blocked) { if (!this.latest) this.latest = new Map(); this.latest.delete(key); this.latest.set(key, obj); return; }
+        if (this.blocked || this._behind()) { if (!this.latest) this.latest = new Map(); this.latest.delete(key); this.latest.set(key, obj); return; }
         this._send(obj);
+        this._mark();
     }
     _flushLatest() {
         if (!this.latest || !this.latest.size) return;
@@ -243,10 +255,42 @@ class ClusterRender extends EventEmitter {
             this.latest.delete(key);
             this._send(obj);
         }
+        this._mark();
     }
+    /*
+     * Flow control by round trip. The socket's own back-pressure comes far too late: the kernel takes a few hundred KB
+     * (thousands of needle values, many seconds of driving) before a write is refused, and a renderer busy with the
+     * Waze video reads them in order, seconds late (the lag). So after values go out a marker follows (an op the
+     * service doesn't have: it answers with an error event, in order); while one is out longer than SYNC_LAG_MS the
+     * renderer is behind, and each value waits, only its newest, until the answer comes. The delay is then one round
+     * trip at most. A service that never answers one (none known) is left to the socket's back-pressure after
+     * SYNC_GIVE_UP_MS.
+     */
+    _behind() {
+        const y = this.sync;
+        if (!y || !y.out) return false;
+        const late = Date.now() - y.at;
+        if (!y.echo && late > SYNC_GIVE_UP_MS) { y.out = false; y.off = true; return false; }
+        return late > SYNC_LAG_MS;
+    }
+    _mark() {
+        const y = this.sync;
+        if (!y || y.out || y.off || !this.sock || !this.connected) return;
+        y.out = true; y.at = Date.now();
+        this._send({ op: SYNC_OP });
+    }
+    /** The renderer's round trips since the last call: { last, max, avg (ms), n }, and the messages and bytes sent. */
+    takeStats() {
+        const r = this.rtt || { last: 0, max: 0, n: 0, sum: 0 }, out = { last: r.last, max: Math.max(r.max, this.lag()), avg: r.n ? Math.round(r.sum / r.n) : 0, n: r.n, msgs: this.sentMsgs || 0, bytes: this.sentBytes || 0, echo: !!(this.sync && this.sync.echo) };
+        this.rtt = { last: r.last, max: 0, n: 0, sum: 0 }; this.sentMsgs = 0; this.sentBytes = 0;
+        return out;
+    }
+    /** How far behind the renderer is: the marker out this long (ms), 0 when it is not. */
+    lag() { return this.sync && this.sync.out ? Date.now() - this.sync.at : 0; }
 
     _write(m) {
         if (!this.sock || !this.connected) return;
+        this.sentMsgs = (this.sentMsgs || 0) + 1; this.sentBytes = (this.sentBytes || 0) + m.length;
         if (!this.sock.write(m)) this.blocked = true;
     }
 

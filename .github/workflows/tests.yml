@@ -1,6 +1,6 @@
 name: Tests
 
-# The kit runtime and all four apps against stand-ins (no SDK, renderer or car needed).
+# The kit runtime and all five apps against stand-ins (no SDK, renderer or car needed).
 on:
   push:
   pull_request:
@@ -20,6 +20,7 @@ jobs:
       - run: node kit/tools/test_cluster_info_overlay.js
       - run: node kit/tools/test_cluster_info.js
       - run: node kit/tools/test_flex_fuel.js
+      - run: node kit/tools/test_task_manager.js
       # test_logs decodes the Logs screen's QR codes from simulated photos with OpenCV
       - uses: actions/setup-python@v5
         with:
@@ -31,3 +32,5 @@ jobs:
           for t in engine app centre data finder logs providers shared signals media waze_window directions m340_extras cover; do
             echo "== tools/test_$t.js"; node tools/test_$t.js
           done
+      # what the app costs while driving, every layout: updates, messages and CPU a second (a bound on the messages)
+      - run: node tools/bench_app.js --secs 2 --max-msg 320

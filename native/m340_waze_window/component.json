@@ -1,7 +1,7 @@
 {
   "id": "m340-waze-window",
   "kind": "tool",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "title": "Waze map in the layout's window",
   "description": "Installed with Cluster Layouts. While a layout shows with Centre: Waze, Waze on cluster draws its map in the layout's window, filling it, with nothing of BMW's own map screen showing; turn the layout off (Cluster Layouts' Show button) and the map goes back to the stock cluster's place. Each switch restarts Waze on cluster: the map comes back after a few seconds. It also finds the song's cover art where the head unit keeps it, when Cluster Layouts asks (Settings > Cover art).",
   "requires": {

@@ -50,10 +50,11 @@ const { rgb } = require('./themes');
 const DEFAULT_TARGET = 'panel';
 const RATE_HZ = 30;          // value updates a second, and at once on a new reading (the gauges glide on the cluster itself: a
                              // faster timer only spends the head unit's time)
-const TEXT_HZ = 60;          // text and colour updates a second at most: every frame, sent only when they change
+const TEXT_HZ = 20;          // text and colour updates a second at most (sent only when they change): a digit read faster
+                             // than this can't be read anyway, and each update costs the head unit a pass over every piece
 const STALE_MS = 3000;
 const TAU_MS = 10;           // a needle's easing towards its reading: most of the way there in the frame it comes
-const MIN_GAP_MS = 4;        // a reading's update at most this soon after the last
+const MIN_GAP_MS = 16;       // a reading's update (the needles only) at most this soon after the last
 const EPS = 0.0015;          // a value moving less than this (of its max) is not sent
 const SWEEP_MS = 700;        // up, then as long back down
 /* a gliding value (glide: true): each new reading reached over about the time the readings come apart (measured),
@@ -67,6 +68,10 @@ const GLIDE_OVERLAP = 1.3, GLIDE_DROP_MS = 650, GLIDE_DROP_FROM = 0.04;
 /* each glide a cubic in GLIDE_KEYS straight pieces (the renderer plays straight lines between keys), its end speed the
  * readings' own pace times GLIDE_PACE */
 const GLIDE_KEYS = 6, GLIDE_PACE = 0.9;
+/* a gliding value re-aimed at most this often: readings faster than this (50 a second and more from some cars) are
+ * taken at the next update, so the renderer gets at most 25 glides a second a needle, not one a reading (each
+ * glide is two messages, and a renderer busy with the Waze video fell seconds behind) */
+const GLIDE_EVERY_MS = 40;
 const FS = { flat: SH.FLAT_FS, panel: SH.PANEL_FS, dial: SH.DIAL_FS, band: SH.BAND_FS, text: SH.TEXT_FS, bg: SH.BG_FS, icon: SH.ICON_FS, spark: SH.SPARK_FS, car: SH.CAR_FS, leds: SH.LEDS_FS, flag: SH.FLAG_FS, eagles: SH.EAGLE_FS, fireworks: SH.FIREWORKS_FS, road: SH.ROAD_FS, chevron: SH.CHEVRON_FS, mdash: SH.MDASH_FS, mtach: SH.MTACH_FS, sdash: SH.SDASH_FS, licon: SH.LICON_FS, e9x: SH.E9X_FS, mbar: SH.MBAR_FS,
     m340art: SH.M340ART_FS, m340side: SH.M340SIDE_FS, m340bar: SH.M340BAR_FS, m340glyphs: SH.M340GLYPHS_FS, m340words: SH.M340WORDS_FS, m340veil: SH.M340VEIL_FS, m340text: SH.M340TEXT_FS, m340img: SH.M340IMG_FS, m340vbar: SH.M340VBAR_FS, m340dial: SH.M340DIAL_FS };
 const Z = { flag: -210, bg: -200, road: -40, fireworks: -190, eagles: -180, flat: -100, panel: -50, spark: -20, band: 0, chevron: 0, mdash: -90, sdash: -150, mtach: 0, e9x: 0, mbar: 0, dial: 0, car: 0, leds: 0, text: 20, icon: 20, licon: 20, m340art: -90, m340side: -90, m340bar: -80, m340glyphs: 20, m340words: 20, m340veil: 950, m340text: 20, m340img: 20, m340vbar: 15, m340dial: 15 };
@@ -297,27 +302,28 @@ function startCluster(opts) {
     /** Values (needles, bands): each eased towards its reading, sent when it moved enough. */
     let valuesAt = 0, valuesAt0 = 0;
     const clock0 = Date.now();
-    function values(d0) {
+    function values(d0, needlesOnly) {
         const d = d0 || opts.data(), now = Date.now();
         // eased by time, not by update: the same TAU_MS whether a reading or the frame timer brought it
         // (at least a frame's worth an update, so updates in quick succession still settle)
         const k = valuesAt ? 1 - Math.exp(-Math.max(1000 / RATE_HZ, now - valuesAt) / TAU_MS) : 1;
         valuesAt = now;
-        const dt = Math.max(0, Math.min(250, now - (valuesAt0 || now)));
-        valuesAt0 = now;
+        // (the frame's own time step: the needles-only updates between frames don't count)
+        const dt = needlesOnly ? 0 : Math.max(0, Math.min(250, now - (valuesAt0 || now)));
+        if (!needlesOnly) valuesAt0 = now;
         pieces.forEach((p) => {
             const s = p.spec;
             // the animated kinds' clock (u_time, seconds, again from 0 every hour), from here every frame: the
             // renderer's own clock (time: 1) never ran on the car (Freedom's flag and Modern wide's road stood still)
-            if (p.clock && inGroup(p)) cr.uniform(p.ref, 'u_time', [Math.round(((now - clock0) / 1000) % 3600 * 1000) / 1000]);
-            if (s.frame && inGroup(p)) {
+            if (p.clock && inGroup(p) && !needlesOnly) cr.uniform(p.ref, 'u_time', [Math.round(((now - clock0) / 1000) % 3600 * 1000) / 1000]);
+            if (s.frame && inGroup(p) && !needlesOnly) {
                 const u = s.frame(d, dt) || {};
                 Object.keys(u).forEach((n) => { const v = u[n], key = String(v); if ((p.frameSent || (p.frameSent = {}))[n] !== key) { p.frameSent[n] = key; cr.uniform(p.ref, n, v); } });
             }
             if (!s.value || !inGroup(p)) return;
             const r = s.range ? s.range(d) : null, max = r ? r[1] : s.max || 1;
             const want = Math.max(r ? r[0] : s.min || 0, Math.min(max * 1.02, Number(s.value(d)) || 0));
-            if (s.glide && !sweepEnd) { glide(p, want, max, now); return; }
+            if ((s.glide || (s.sweep && s.glide !== false)) && !sweepEnd) { glide(p, want, r ? r[0] : s.min || 0, max, now); return; }
             p.value += (want - p.value) * k;
             if (Math.abs(want - p.value) < max * EPS / 4) p.value = want;
             if (Math.abs(p.value - p.sent) >= max * EPS) { p.sent = p.value; cr.uniform(p.ref, 'u_value', [Math.round(p.value * 10000) / 10000]); }
@@ -329,9 +335,11 @@ function startCluster(opts) {
      * there, to the reading, over a little more than the time between the car's readings, and holds it there. Two
      * messages a reading (the start, the glide), none between; the motion is the cluster's own, at its frame rate.
      */
-    function glide(p, want, max, now) {
+    function glide(p, want, lo, max, now) {
         const g = p.glide || (p.glide = { p0: p.value, v0: 0, p1: p.value, v1: 0, at: now, ms: 0, gap: 0, seen: 0, last: p.value, anim: 0 });
         if (Math.abs(want - g.p1) < max * EPS) return;
+        // (re-aimed at most every GLIDE_EVERY_MS: a faster reading waits for the next update; a fall to 0 goes at once)
+        if (now - g.at < GLIDE_EVERY_MS && !(want <= max * 0.002)) return;
         // the time between readings that moved it (an average of the recent ones; a long pause does not count)
         const gap = g.seen ? now - g.seen : 0;
         if (gap > 0 && gap < GLIDE_GAP_MS) g.gap = g.gap ? g.gap * 0.75 + gap * 0.25 : gap;
@@ -345,7 +353,7 @@ function startCluster(opts) {
         // the new curve: from here at the speed it has now, to the reading, arriving at the reading's own pace (a
         // cubic: no jump in speed at a reading, as a needle's own inertia), held inside the scale
         g.p0 = cur.p; g.v0 = drop ? 0 : cur.v; g.p1 = want; g.v1 = drop ? 0 : Math.max(-max / ms, Math.min(max / ms, pace * GLIDE_PACE)); g.at = now; g.ms = ms;
-        const v = (x) => Math.round(Math.max(0, Math.min(max * 1.02, x)) * 10000) / 10000;
+        const v = (x) => Math.round(Math.max(Math.min(0, lo), Math.min(max * 1.02, x)) * 10000) / 10000;
         const keys = [];
         for (let k = 0; k <= GLIDE_KEYS; k++) { const t = Math.round(ms * k / GLIDE_KEYS); keys.push(t + ':' + v(curve(g, now + t).p)); }
         // the value the layer holds set to where the glide starts first: the renderer puts a replaced animation's
@@ -460,12 +468,23 @@ function startCluster(opts) {
         tickAt = Date.now();
         tick();
         const dt = process.hrtime(t0), ms = dt[0] * 1e3 + dt[1] / 1e6;
-        perf.n++; perf.totalMs += ms; if (ms > perf.maxMs) perf.maxMs = ms;
+        perf.n++; perf.totalMs += ms; if (ms > perf.maxMs) perf.maxMs = ms; if (ms > (perf.maxSince || 0)) perf.maxSince = ms;
     };
+    /* a new reading between frames: the needles only (values), not every text, colour and picture (update), which
+     * waits for its own rate: a car sending 50 readings a second made the head unit go over every piece 70 times a
+     * second (the lag) */
     const nudge = () => {
-        if (nudged || !shown) return;
+        if (nudged || !shown || !built) return;
         nudged = true;
-        setImmediate(() => { nudged = false; if (Date.now() - tickAt >= MIN_GAP_MS) timed(); });
+        setImmediate(() => {
+            nudged = false;
+            if (!shown || !built || sweepEnd || Date.now() - tickAt < MIN_GAP_MS) return;
+            const t0 = process.hrtime();
+            tickAt = Date.now();
+            values(undefined, true);   // (the needles only: an animated background's clock keeps the frame rate)
+            const dt = process.hrtime(t0), ms = dt[0] * 1e3 + dt[1] / 1e6;
+            perf.n++; perf.totalMs += ms; if (ms > perf.maxMs) perf.maxMs = ms; if (ms > (perf.maxSince || 0)) perf.maxSince = ms;
+        });
     };
     if (opts.onFresh) opts.onFresh(nudge);
     const timer = setInterval(timed, 1000 / RATE_HZ);
@@ -480,6 +499,13 @@ function startCluster(opts) {
         _tick: tick,
         /** For the tests: one complete update (values, trend samples, texts and colours), whatever is due. */
         _full: () => { values(); samples(); update(false); },
+        /** Since the last call: the updates, their time (ms), the messages and bytes sent, the renderer's round trips
+         * (ms): for the Task Manager (Cluster Layouts' layouts_perf.json). */
+        takeStats() {
+            const r = cr.takeStats ? cr.takeStats() : {}, out = Object.assign({ updates: perf.n - (perf.n0 || 0), avgMs: perf.n - (perf.n0 || 0) ? Math.round((perf.totalMs - (perf.t0 || 0)) / (perf.n - (perf.n0 || 0)) * 100) / 100 : 0, maxMs: Math.round((perf.maxSince || 0) * 100) / 100 }, { rtt: r, layers: pieces.length, shown });
+            perf.n0 = perf.n; perf.t0 = perf.totalMs; perf.maxSince = 0;
+            return out;
+        },
         /** How long an update takes in this app (ms): { n, avgMs, maxMs }. */
         perf: () => ({ n: perf.n, avgMs: perf.n ? Math.round(perf.totalMs / perf.n * 1000) / 1000 : 0, maxMs: Math.round(perf.maxMs * 1000) / 1000 }),
         /** For the tests: the built pieces and what each shows now. */

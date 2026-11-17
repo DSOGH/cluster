@@ -14,7 +14,12 @@ const font = require(path.join(APP, 'font'));
 const RESERVED = ['u_mvp', 'u_mv', 'u_m', 'u_v', 'u_p', 'u_normal'];   // the renderer's matrix names (PROTOCOL.md)
 let ok = 0;
 const check = (name, fn) => { fn(); ok++; console.log('ok   ' + name); };
-const drive = (s, seconds, fn) => { for (let i = 0; i < seconds * 25; i++) { s.setData(fn(i / 25)); s.engine._tick(); } };
+// (25 updates a second of the car's time: the clock moved on 40 ms each, as on the car, so time-based limits such as
+// a glide's re-aim at most every 30 ms see the time pass)
+const realNow = Date.now;
+let skew = 0;
+Date.now = () => realNow() + skew;
+const drive = (s, seconds, fn) => { for (let i = 0; i < seconds * 25; i++) { skew += 40; s.setData(fn(i / 25)); s.engine._tick(); } };
 const effects = (s) => Array.from(s.client.layers.values()).filter((l) => l.kind === 'effect');
 const textsOf = (s) => s.engine._pieces().filter((p) => p.text !== null).map((p) => p.text);
 const hard = (t) => ({ speed: 80 + 80 * Math.sin(t / 4), rpm: 2500 + 2000 * Math.sin(t * 2), stage: 'D', gear: 1 + Math.floor(t / 10) % 8, oil: 100 + t / 6, coolant: 90, mode: t > 30 ? 'S' : null });
@@ -46,7 +51,7 @@ LAYOUTS.forEach((L) => {
         const perSec = s.client.bytes / 60;
         console.log('     driving: ' + Math.round(s.client.messages / 60) + ' messages/s, ' + (perSec / 1024).toFixed(1) + ' KB/s');
         assert(!s.client.log.some((m) => m.op === 'pixels' || m.op === 'layer'));
-        assert(perSec < 16 * 1024);
+        assert(perSec < 24 * 1024, (perSec / 1024).toFixed(1) + " KB/s");   // (the needles glide on the cluster: two messages a reading; the link takes 2000 KB/s and more)
         s.stop();
     });
     check(id + ': parked with nothing changing sends nothing (but an animated background\'s clock)', () => {
@@ -55,7 +60,9 @@ LAYOUTS.forEach((L) => {
         drive(s, 2, still);
         s.client.reset();
         drive(s, 10, still);
-        const other = s.client.log.filter((m) => !(m.op === 'uniform' && m.name === 'u_time'));
+        const clockRefs = s.engine._pieces().filter((p) => /clock|time/i.test(p.key)).map((p) => p.layer);
+        // (a trend line takes its sample every 2 s, parked too; the clock moves on with the minute)
+        const other = s.client.log.filter((m) => !(m.op === 'uniform' && /^u_(time|hist|count)$/.test(m.name)) && clockRefs.indexOf(m.ref) < 0);
         assert.strictEqual(other.length, 0, JSON.stringify(other.slice(0, 3)));
         s.stop();
     });

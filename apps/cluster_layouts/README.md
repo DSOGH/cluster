@@ -353,15 +353,22 @@ the KOMBI carries about 11.5 MB/s for everything, including the HMI's own conten
 - Each piece of a layout is an **effect layer**: a small GLSL ES 1.00 fragment shader over its own rectangle
   (`shared/shaders.js`). The dial (face, ticks, red zone, numerals, needle, hub) is one shader; each text is
   another; the background is a flat colour.
-- **The render service draws at most 8 layers for an app** (32 for all apps together), so only a layout's
-  first 8 pieces show today; the rest are refused (the app's page says so). Drawing many pieces with one big
-  generated shader instead made the cluster restart, so that is not done. The way on is the render
-  service allowing more layers an app.
+- **The render service draws at most 64 layers for an app** (96 for all apps together). Drawing many pieces with
+  one big generated shader instead made the cluster restart, so that is not done.
 - What is sent:
   - **once**: the shaders, their colours and one glyph atlas (a 1.5 KB-per-glyph distance field, ~96 KB):
     about **128 KB** in all;
-  - **while driving**: the needles' values when they moved, and texts and colours when they changed: about **2.5 KB/s** at most (`tools/test_engine.js` measures it); **nothing** while nothing
-    changes.
+  - **while driving**: the needles' values when they moved, and texts and colours when they changed: about
+    **10-30 KB/s** with a car sending 50 readings a second (`tools/bench_app.js` measures each layout);
+    **nothing** while nothing changes.
+- **Smooth and on time.** Each needle and bar *glides*: a new reading goes as a short curve the cluster plays at
+  its own frame rate, from where the needle is to the reading (at most 25 a second a needle), so it moves
+  smoothly however late the head unit's timer runs. Texts and colours go at most 20 times a second; a reading
+  between updates moves only the needles.
+- **Never behind.** After values go out, the app sends a marker the renderer answers in order. While an answer is
+  late (the renderer busy with the Waze video, the head unit loaded) each value waits, only its newest, until it
+  comes: the cluster is never more than one round trip behind, instead of playing seconds of old readings queued
+  in the socket (the lag before 0.40). The Task Manager app shows the round trip (its Cluster page).
 
 ## Install on the car
 
